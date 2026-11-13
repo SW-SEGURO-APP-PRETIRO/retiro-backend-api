@@ -45,10 +45,21 @@ services:
       sh -c "python manage.py esperar_bd &&
              python manage.py migrate --noinput &&
              daphne -b 0.0.0.0 -p 8000 config.asgi:application"
-    # Temporal, hasta que pongamos el proxy HTTPS (paso 11)
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  proxy:
+    image: caddy:2-alpine
+    depends_on:
+      - app
     ports:
-      - "127.0.0.1:8000:8000"
+      - "8443:443"
+    volumes:
+      - ./proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
     restart: unless-stopped
 
 volumes:
   sqlserver_data:
+  caddy_data:

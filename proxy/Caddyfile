@@ -1,0 +1,16 @@
+# Proxy local con HTTPS (certificado interno de Caddy). Reenvía HTTP y WebSocket (wss://)
+# al servidor de la aplicación sin configuración extra.
+# Acceso: https://localhost:8443
+
+localhost {
+	tls internal
+	encode gzip
+
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+	}
+
+	reverse_proxy app:8000
+}
