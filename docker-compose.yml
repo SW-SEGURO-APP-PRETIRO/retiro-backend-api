@@ -29,5 +29,26 @@ services:
       retries: 5
     restart: unless-stopped
 
+  app:
+    build: .
+    env_file: .env
+    environment:
+      DB_HOST: db
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # 1) crea la BD y el usuario si no existen  2) migra  3) arranca ASGI
+    command: >
+      sh -c "python manage.py esperar_bd &&
+             python manage.py migrate --noinput &&
+             daphne -b 0.0.0.0 -p 8000 config.asgi:application"
+    # Temporal, hasta que pongamos el proxy HTTPS (paso 11)
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+
 volumes:
   sqlserver_data:
