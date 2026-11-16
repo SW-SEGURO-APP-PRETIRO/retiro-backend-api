@@ -1,6 +1,6 @@
 # Diagrama entidad-relación del sistema
 
-Las 17 tablas de negocio de los 7 módulos del monolito.
+Las 20 tablas de negocio de los 7 módulos del monolito.
 
 - **Línea continua:** clave foránea real (solo dentro del mismo módulo).
 - **Línea punteada:** referencia por id entre módulos, sin clave foránea (regla MM-03).
@@ -8,7 +8,7 @@ Las 17 tablas de negocio de los 7 módulos del monolito.
 - Los **cinco roles** (Administrador del Sistema, Administrador Escolar, Padre, Guardia y Cuidador Fijo) se guardan en `Usuario`, diferenciados por el campo `rol`.
 - `Cuidador` guarda a la persona que retira; si es fijo, `usuario_id` apunta a su cuenta en `Usuario`.
 - `institucion_id = 0` en `EventoAuditoria` indica un evento global (sin institución).
-- El módulo `chat` solo persiste las notificaciones; el envío en tiempo real va por WebSocket y push, sin tablas de mensajes.
+- El módulo `chat` persiste notificaciones para el primer bimestre. Las tablas de salas y mensajes quedan preparadas para una futura funcionalidad de chat.
 
 | Módulo | Tablas |
 |---|---|
@@ -17,8 +17,18 @@ Las 17 tablas de negocio de los 7 módulos del monolito.
 | autenticacion | TokenRecuperacion |
 | cuidadores | Cuidador, AutorizacionCuidador, PersonaBloqueada |
 | retiros | SesionSalida, PaseQR, PaseEstudiante, Retiro |
-| chat | Notificacion |
+| chat | Notificacion, SalaChat, SalaParticipante, MensajeChat |
 | auditoria | EventoAuditoria |
+
+### Campos adicionales de chat
+
+| Tabla | Campos |
+|---|---|
+| `SalaChat` | `institucion_id`, `tipo`, `nombre`, `creada_en` |
+| `SalaParticipante` | `institucion_id`, `sala_id`, `usuario_id` |
+| `MensajeChat` | `institucion_id`, `sala_id`, `autor_id`, `contenido`, `enviado_en` |
+
+`SalaChat`, `SalaParticipante` y `MensajeChat` quedan preparadas para una futura funcionalidad de chat y no forman parte del flujo de notificaciones del primer bimestre.
 
 ```mermaid
 erDiagram
@@ -60,6 +70,7 @@ erDiagram
         string estado
         string motivo_estado
         datetime creada_en
+        bigint creada_por_id
         datetime aprobada_en
         bigint aprobada_por_id
     }
@@ -220,6 +231,7 @@ erDiagram
         bigint id PK
         bigint institucion_id
         bigint secuencia
+        string categoria
         string tipo
         bigint actor_id
         string resultado

@@ -33,12 +33,17 @@ class EventoQuerySet(models.QuerySet):
 
 
 class EventoAuditoria(models.Model):
+    class Categoria(models.TextChoices):
+        TECNICA = "TECNICA", "Técnica"
+        OPERATIVA = "OPERATIVA", "Operativa"
+
     class Resultado(models.TextChoices):
         EXITO = "EXITO", "Éxito"
         FALLO = "FALLO", "Fallo"
 
     institucion_id = models.PositiveBigIntegerField(default=GLOBAL)
     secuencia = models.PositiveBigIntegerField()  # 1, 2, 3... dentro de cada institución
+    categoria = models.CharField(max_length=9, choices=Categoria.choices, default=Categoria.OPERATIVA)
     tipo = models.CharField(max_length=60)
     actor_id = models.PositiveBigIntegerField(null=True, blank=True)
     resultado = models.CharField(max_length=5, choices=Resultado.choices)

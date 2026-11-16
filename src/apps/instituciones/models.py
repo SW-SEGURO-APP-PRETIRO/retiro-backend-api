@@ -23,6 +23,7 @@ class Institucion(models.Model):
     estado = models.CharField(max_length=25, choices=Estado.choices, default=Estado.PENDIENTE_VERIFICACION)
     motivo_estado = models.CharField(max_length=255, blank=True)  # motivo de rechazo o suspensión
     creada_en = models.DateTimeField(auto_now_add=True)
+    creada_por_id = models.PositiveBigIntegerField(null=True, blank=True)  # Usuario que registra la institución
     aprobada_en = models.DateTimeField(null=True, blank=True)
     aprobada_por_id = models.PositiveBigIntegerField(null=True, blank=True)  # Usuario (referencia por id)
 

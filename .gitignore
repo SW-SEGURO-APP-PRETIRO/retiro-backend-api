@@ -21,3 +21,6 @@ htmlcov/
 # Artefactos
 staticfiles/
 *.log
+
+#.md
+p-*.md

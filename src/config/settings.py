@@ -29,6 +29,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "channels",
+    "rest_framework",
+    "drf_spectacular",
     # Utilidades transversales (comandos esperar_bd y seed_demo)
     "shared",
     # Módulos del monolito (orden = de base a cima)
@@ -124,6 +126,26 @@ if not DEBUG:
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
+
+# ------------------------------------------------------------------------- API
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 20,
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Retiro Escolar Seguro API",
+    "DESCRIPTION": "API REST del sistema Retiro Escolar Seguro.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+}
 
 LOGIN_URL = "/autenticacion/ingresar/"
 

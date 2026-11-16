@@ -25,6 +25,8 @@ erDiagram
     Usuario ||..o{ Retiro : "guardia_id"
     Usuario ||..o{ Notificacion : "destinatario_id"
     Usuario ||..o{ EventoAuditoria : "actor_id"
+    SalaChat ||--o{ SalaParticipante : "sala"
+    SalaChat ||--o{ MensajeChat : "sala"
 
     Institucion {
         bigint id PK
@@ -37,6 +39,7 @@ erDiagram
         string estado
         string motivo_estado
         datetime creada_en
+        bigint creada_por_id
         datetime aprobada_en
         bigint aprobada_por_id
     }
@@ -193,10 +196,32 @@ erDiagram
         datetime creada_en
         datetime leida_en
     }
+    SalaChat {
+        bigint id PK
+        bigint institucion_id
+        string tipo
+        string nombre
+        datetime creada_en
+    }
+    SalaParticipante {
+        bigint id PK
+        bigint institucion_id
+        bigint sala_id FK
+        bigint usuario_id
+    }
+    MensajeChat {
+        bigint id PK
+        bigint institucion_id
+        bigint sala_id FK
+        bigint autor_id
+        string contenido
+        datetime enviado_en
+    }
     EventoAuditoria {
         bigint id PK
         bigint institucion_id
         bigint secuencia
+        string categoria
         string tipo
         bigint actor_id
         string resultado
