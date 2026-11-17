@@ -1,0 +1,175 @@
+import hashlib
+import json
+import secrets
+from datetime import timedelta
+
+import pyotp
+from cryptography.fernet import Fernet, InvalidToken
+from django.conf import settings
+from django.contrib.auth import authenticate, login, logout
+from django.db import transaction
+from django.utils import timezone
+
+from apps.auditoria.models import EventoAuditoria
+from apps.cuentas.models import Usuario
+from apps.instituciones.models import Institucion
+
+from .models import TokenRecuperacion
+
+
+def datos_usuario(user):
+    institucion = None
+    if user.institucion_id:
+        institucion = Institucion.objects.filter(pk=user.institucion_id).values(
+            "id", "nombre", "estado"
+        ).first()
+    return {
+        "id": user.pk,
+        "correo": user.correo,
+        "nombres": user.nombres,
+        "apellidos": user.apellidos,
+        "rol": user.rol,
+        "institucion_id": user.institucion_id,
+        "institucion": institucion,
+    }
+
+
+def _registrar_auditoria(user, tipo, resultado, detalle, categoria=EventoAuditoria.Categoria.TECNICA):
+    institucion_id = user.institucion_id if user and user.institucion_id else EventoAuditoria._meta.get_field(
+        "institucion_id"
+    ).default
+    actor_id = user.pk if user else None
+    with transaction.atomic():
+        ultimo = (
+            EventoAuditoria.objects.select_for_update()
+            .filter(institucion_id=institucion_id)
+            .order_by("-secuencia")
+            .first()
+        )
+        secuencia = (ultimo.secuencia + 1) if ultimo else 1
+        anterior = ultimo.hash_propio if ultimo else "0" * 64
+        contenido = json.dumps(
+            {
+                "institucion_id": institucion_id,
+                "secuencia": secuencia,
+                "categoria": categoria,
+                "tipo": tipo,
+                "actor_id": actor_id,
+                "resultado": resultado,
+                "detalle": detalle,
+            },
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+        propio = hashlib.sha256((anterior + contenido).encode("utf-8")).hexdigest()
+        return EventoAuditoria.objects.create(
+            institucion_id=institucion_id,
+            secuencia=secuencia,
+            categoria=categoria,
+            tipo=tipo,
+            actor_id=actor_id,
+            resultado=resultado,
+            detalle=json.dumps(detalle, ensure_ascii=False),
+            fecha=timezone.now(),
+            hash_anterior=anterior,
+            hash_propio=propio,
+        )
+
+
+def autenticar(request, correo, contrasena):
+    user = Usuario._base_manager.filter(correo__iexact=correo).first()
+    ahora = timezone.now()
+    if user and user.bloqueado_hasta and user.bloqueado_hasta > ahora:
+        _registrar_auditoria(user, "INGRESO_BLOQUEADO", "FALLO", {"motivo": "bloqueo_temporal"})
+        return None, "La cuenta está bloqueada temporalmente."
+    if user and user.estado in (Usuario.Estado.BLOQUEADA, Usuario.Estado.SUSPENDIDA):
+        _registrar_auditoria(user, "INGRESO_RECHAZADO", "FALLO", {"motivo": user.estado})
+        return None, "La cuenta no está disponible."
+
+    autenticado = authenticate(request, username=correo, password=contrasena)
+    if autenticado is None:
+        if user:
+            user.intentos_fallidos += 1
+            campos = ["intentos_fallidos"]
+            if user.intentos_fallidos >= 3:
+                user.bloqueado_hasta = ahora + timedelta(minutes=15)
+                campos.append("bloqueado_hasta")
+            user.save(update_fields=campos)
+            _registrar_auditoria(
+                user,
+                "INTENTO_INGRESO_FALLIDO",
+                "FALLO",
+                {"intentos_fallidos": user.intentos_fallidos},
+            )
+        return None, "Credenciales inválidas."
+
+    codigo_totp = request.data.get("codigo_totp", "")
+    if autenticado.totp_secreto_cifrado:
+        if not codigo_totp:
+            return None, "La cuenta requiere un código TOTP."
+        try:
+            secreto = Fernet(settings.FIELD_ENCRYPTION_KEY.encode("utf-8")).decrypt(
+                autenticado.totp_secreto_cifrado.encode("utf-8")
+            ).decode("utf-8")
+        except (InvalidToken, ValueError):
+            return None, "No se pudo validar la configuración TOTP."
+        if not pyotp.TOTP(secreto).verify(codigo_totp):
+            _registrar_auditoria(autenticado, "INTENTO_TOTP_FALLIDO", "FALLO", {})
+            return None, "El código TOTP no es válido."
+
+    login(request, autenticado)
+    autenticado.intentos_fallidos = 0
+    autenticado.bloqueado_hasta = None
+    autenticado.save(update_fields=["intentos_fallidos", "bloqueado_hasta"])
+    _registrar_auditoria(autenticado, "INGRESO_EXITOSO", "EXITO", {})
+    return autenticado, None
+
+
+def cerrar_sesion(request):
+    user = request.user
+    logout(request)
+    _registrar_auditoria(user, "CIERRE_SESION", "EXITO", {})
+
+
+def cambiar_contrasena(user, contrasena_actual, nueva_contrasena):
+    if not user.contrasena_temporal:
+        raise ValueError("La cuenta no requiere cambio de contraseña temporal.")
+    if not user.check_password(contrasena_actual):
+        raise ValueError("La contraseña actual no es válida.")
+    user.set_password(nueva_contrasena)
+    user.contrasena_temporal = False
+    user.expira_temporal = None
+    user.save(update_fields=["password", "contrasena_temporal", "expira_temporal"])
+    _registrar_auditoria(user, "CAMBIO_CONTRASENA", "EXITO", {})
+
+
+def solicitar_recuperacion(correo):
+    user = Usuario._base_manager.filter(correo__iexact=correo).first()
+    if not user:
+        return None
+    token = secrets.token_urlsafe(32)
+    TokenRecuperacion.objects.create(
+        usuario_id=user.pk,
+        hash_token=hashlib.sha256(token.encode("utf-8")).hexdigest(),
+        expira_en=timezone.now() + timedelta(minutes=30),
+    )
+    _registrar_auditoria(user, "SOLICITUD_RECUPERACION", "EXITO", {})
+    return token
+
+
+def confirmar_recuperacion(token, nueva_contrasena):
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    registro = TokenRecuperacion.objects.filter(
+        hash_token=token_hash, usado_en__isnull=True, expira_en__gt=timezone.now()
+    ).first()
+    if not registro:
+        raise ValueError("El token es inválido o expiró.")
+    with transaction.atomic():
+        usuario = Usuario._base_manager.select_for_update().get(pk=registro.usuario_id)
+        usuario.set_password(nueva_contrasena)
+        usuario.contrasena_temporal = False
+        usuario.expira_temporal = None
+        usuario.save(update_fields=["password", "contrasena_temporal", "expira_temporal"])
+        registro.usado_en = timezone.now()
+        registro.save(update_fields=["usado_en"])
+    _registrar_auditoria(usuario, "RECUPERACION_CONTRASENA", "EXITO", {})
