@@ -32,6 +32,20 @@ class EsAdminSistemaOEscolar(BasePermission):
         )
 
 
+class EsPadreOAdminEscolar(BasePermission):
+    """PADRE (sobre sus hijos) o ADMIN_ESCOLAR de una institución activa."""
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if user.rol == Rol.PADRE:
+            return user.institucion_id is not None
+        if user.rol == Rol.ADMIN_ESCOLAR:
+            return Institucion.objects.filter(pk=user.institucion_id, estado=Institucion.Estado.ACTIVA).exists()
+        return False
+
+
 class PerteneceAMismaInstitucion(BasePermission):
     def has_object_permission(self, request, view, obj):
         user = request.user

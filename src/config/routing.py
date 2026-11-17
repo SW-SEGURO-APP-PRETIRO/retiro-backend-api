@@ -1,2 +1,4 @@
-"""Rutas WebSocket. El módulo `chat` agregará aquí sus consumers."""
-websocket_urlpatterns = []
+"""Rutas WebSocket del proyecto: reúne las de cada módulo."""
+from apps.chat.routing import websocket_urlpatterns as chat_websocket_urlpatterns
+
+websocket_urlpatterns = [*chat_websocket_urlpatterns]

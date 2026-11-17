@@ -10,6 +10,24 @@ from apps.cuentas.models import Rol, Usuario
 from .models import Curso, Institucion, Puerta
 
 
+def _notificar_institucion_pendiente(institucion):
+    """Avisa a los ADMIN_SISTEMA que hay una institución esperando aprobación."""
+    # Importes locales: evitan ciclos entre módulos al cargar
+    from apps.chat.services import GRUPO_ADMIN_SISTEMA, crear_y_emitir_notificacion
+    from apps.cuentas.services import ids_usuarios_por_rol
+
+    crear_y_emitir_notificacion(
+        destinatario_ids=ids_usuarios_por_rol(Rol.ADMIN_SISTEMA),
+        grupo=GRUPO_ADMIN_SISTEMA,
+        institucion_id=None,
+        tipo="INSTITUCION_PENDIENTE",
+        titulo="Institución pendiente de aprobación",
+        mensaje=f"{institucion.nombre} solicitó registrarse y espera su aprobación.",
+        referencia=institucion.pk,
+        subevento="seguridad.anomalia",
+    )
+
+
 def registrar_institucion(datos, actor=None):
     from apps.autenticacion.services import _registrar_auditoria
 
@@ -47,6 +65,7 @@ def registrar_institucion(datos, actor=None):
             {"institucion_id": institucion.pk, "admin_escolar_id": usuario.pk},
             categoria=EventoAuditoria.Categoria.OPERATIVA,
         )
+        _notificar_institucion_pendiente(institucion)
     return institucion, usuario, contrasena_temporal
 
 

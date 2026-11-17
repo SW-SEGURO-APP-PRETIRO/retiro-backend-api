@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import secrets
 from datetime import timedelta
 
@@ -11,7 +12,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.auditoria.models import EventoAuditoria
-from apps.cuentas.models import Usuario
+from apps.cuentas.models import Rol, Usuario
 from apps.instituciones.models import Institucion
 
 from .models import TokenRecuperacion
@@ -76,6 +77,27 @@ def _registrar_auditoria(user, tipo, resultado, detalle, categoria=EventoAuditor
         )
 
 
+def _notificar_bloqueo_de_cuenta(user):
+    """Alerta roja al ADMIN_SISTEMA. Un fallo aquí nunca debe impedir responder el intento de ingreso."""
+    try:
+        # Importes locales: evitan ciclos entre módulos al cargar
+        from apps.chat.services import GRUPO_ADMIN_SISTEMA, crear_y_emitir_notificacion
+        from apps.cuentas.services import ids_usuarios_por_rol
+
+        crear_y_emitir_notificacion(
+            destinatario_ids=ids_usuarios_por_rol(Rol.ADMIN_SISTEMA),
+            grupo=GRUPO_ADMIN_SISTEMA,
+            institucion_id=None,
+            tipo="CUENTA_BLOQUEADA",
+            titulo="Cuenta bloqueada por intentos fallidos",
+            mensaje=f"La cuenta {user.correo} se bloqueó 15 minutos tras 3 intentos fallidos de ingreso.",
+            referencia=user.pk,
+            subevento="seguridad.anomalia",
+        )
+    except Exception:  # noqa: BLE001
+        logging.getLogger(__name__).exception("No se pudo notificar el bloqueo de la cuenta.")
+
+
 def autenticar(request, correo, contrasena):
     user = Usuario._base_manager.filter(correo__iexact=correo).first()
     ahora = timezone.now()
@@ -111,6 +133,8 @@ def autenticar(request, correo, contrasena):
                 "FALLO",
                 {"intentos_fallidos": user.intentos_fallidos},
             )
+            if user.intentos_fallidos >= 3:
+                _notificar_bloqueo_de_cuenta(user)
         return None, "Credenciales inválidas."
 
     codigo_totp = request.data.get("codigo_totp", "")

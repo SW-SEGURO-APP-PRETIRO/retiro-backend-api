@@ -127,6 +127,17 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 
+# ------------------------------------------------------------------------- Correo
+# En desarrollo el correo se imprime en la consola de `app` (docker compose logs app).
+# Para enviar correo real defina EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend y EMAIL_HOST*.
+EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = env("EMAIL_HOST", default="localhost")
+EMAIL_PORT = env.int("EMAIL_PORT", default=25)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=False)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="Retiro Escolar Seguro <no-responder@retiro.local>")
+
 # ------------------------------------------------------------------------- API
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [

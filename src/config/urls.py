@@ -19,5 +19,8 @@ urlpatterns = [
     path("api/v1/autenticacion/", include("apps.autenticacion.urls")),
     path("api/v1/instituciones/", include("apps.instituciones.urls")),
     path("api/v1/cuentas/", include("apps.cuentas.urls")),
+    path("api/v1/cuidadores/", include("apps.cuidadores.urls")),
+    path("api/v1/auditoria/", include("apps.auditoria.urls")),
+    path("api/v1/notificaciones/", include("apps.chat.urls")),
     # Las rutas de cada módulo se incluyen aquí cuando existan sus vistas
 ]

@@ -137,3 +137,62 @@ def cambiar_estado_usuario(admin_sistema, usuario, estado):
         {"usuario_id": usuario.pk},
     )
     return usuario
+
+
+# ---------------------------------------------------------------------------------------------
+# Consultas y operaciones que otros módulos (cuidadores, chat) necesitan de `cuentas`.
+# Así no importan sus modelos directamente (regla del monolito modular).
+# ---------------------------------------------------------------------------------------------
+def obtener_estudiante(institucion_id, estudiante_id):
+    """Estudiante de ESA institución o None. Nunca devuelve uno de otra institución."""
+    return Estudiante._base_manager.filter(pk=estudiante_id, institucion_id=institucion_id).first()
+
+
+def nombres_estudiantes(institucion_id, ids):
+    """{id: "Apellidos Nombres"} de los estudiantes de la institución indicada."""
+    filas = Estudiante._base_manager.filter(institucion_id=institucion_id, pk__in=list(ids)).values_list(
+        "pk", "apellidos", "nombres"
+    )
+    return {pk: f"{apellidos} {nombres}" for pk, apellidos, nombres in filas}
+
+
+def padre_representa_estudiante(padre_id, estudiante_id):
+    return RelacionPadreEstudiante._base_manager.filter(
+        padre_id=padre_id, estudiante_id=estudiante_id, vigente=True
+    ).exists()
+
+
+def correo_en_uso(correo):
+    return Usuario._base_manager.filter(correo__iexact=correo).exists()
+
+
+def ids_usuarios_por_rol(rol, institucion_id=None):
+    """Ids de las cuentas ACTIVAS de un rol (y de una institución, si se indica)."""
+    qs = Usuario._base_manager.filter(rol=rol, estado=Usuario.Estado.ACTIVA)
+    if institucion_id is not None:
+        qs = qs.filter(institucion_id=institucion_id)
+    return list(qs.values_list("pk", flat=True))
+
+
+def crear_cuenta_cuidador_fijo(actor, *, correo, cedula, nombres, apellidos, telefono=""):
+    """Crea la cuenta CUIDADOR_FIJO con contraseña temporal (secrets, 48 h, cambio obligatorio).
+
+    Devuelve (usuario, contrasena_temporal). La contraseña solo se entrega por correo: nunca se
+    registra en bitácora, notificaciones ni respuestas de la API.
+    """
+    contrasena = generar_contrasena_temporal()
+    usuario = Usuario.objects.crear_usuario(
+        correo=correo,
+        password=contrasena,
+        cedula=cedula,
+        nombres=nombres,
+        apellidos=apellidos,
+        telefono=telefono,
+        rol=Rol.CUIDADOR_FIJO,
+        institucion_id=actor.institucion_id,
+        estado=Usuario.Estado.PENDIENTE,
+    )
+    usuario.contrasena_temporal = True
+    usuario.expira_temporal = timezone.now() + timedelta(hours=48)
+    usuario.save(update_fields=["contrasena_temporal", "expira_temporal"])
+    return usuario, contrasena
