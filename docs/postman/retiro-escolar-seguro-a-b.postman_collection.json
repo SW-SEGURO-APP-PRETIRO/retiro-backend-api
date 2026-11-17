@@ -1,0 +1,684 @@
+{
+  "info": {
+    "_postman_id": "4e6f4a8f-7a8a-4d84-b0ae-1bimestre-a-b",
+    "name": "Retiro Escolar Seguro - API A+B",
+    "description": "Colección automatizada para Bloque A (autenticación) y Bloque B (instituciones y cuentas). Requiere preparar scripts/seed_demo.py antes de ejecutar.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const base = pm.environment.get('base_url');",
+          "if (!pm.request.headers.has('Accept')) pm.request.headers.upsert({key: 'Accept', value: 'application/json'});",
+          "if (pm.request.method !== 'GET' && pm.request.method !== 'HEAD') {",
+          "const csrf = pm.environment.get('csrf_token') || pm.cookies.get('csrftoken');",
+          "  if (csrf) pm.request.headers.upsert({key: 'X-CSRFToken', value: csrf});",
+          "  pm.request.headers.upsert({key: 'Referer', value: base + '/'});",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "00 - Preparación",
+      "item": [
+        {
+          "name": "Salud",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/salud/", "host": ["{{base_url}}"], "path": ["salud", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().estado).to.eql('ok');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener CSRF y abrir documentación",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "text/html" }],
+            "url": { "raw": "{{base_url}}/api/docs/", "host": ["{{base_url}}"], "path": ["api", "docs", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Swagger disponible', () => pm.response.to.have.status(200));",
+                  "const cookie = pm.response.headers.get('Set-Cookie') || '';",
+                  "const match = cookie.match(/csrftoken=([^;]+)/);",
+                  "if (match) pm.environment.set('csrf_token', match[1]);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "A - Autenticación",
+      "item": [
+        {
+          "name": "Login - ADMIN_SISTEMA",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"correo\":\"{{admin_sistema_correo}}\",\"contrasena\":\"{{seed_password}}\"}" },
+            "url": { "raw": "{{base_url}}/api/v1/autenticacion/ingresar/", "host": ["{{base_url}}"], "path": ["api", "v1", "autenticacion", "ingresar", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login correcto', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.expect(j.datos.usuario.rol).to.eql('ADMIN_SISTEMA');",
+                  "pm.expect(j.datos.sesion.autenticado).to.eql(true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login - credenciales inválidas",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"correo\":\"{{admin_sistema_correo}}\",\"contrasena\":\"Incorrecta1!\"}" },
+            "url": { "raw": "{{base_url}}/api/v1/autenticacion/ingresar/", "host": ["{{base_url}}"], "path": ["api", "v1", "autenticacion", "ingresar", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Rechazo de credenciales o CSRF', () => pm.expect([401, 403]).to.include(pm.response.code));",
+                  "pm.expect(['AUTENTICACION_FALLIDA', 'PERMISSION_DENIED']).to.include(pm.response.json().error.codigo);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Perfil autenticado",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/autenticacion/perfil/", "host": ["{{base_url}}"], "path": ["api", "v1", "autenticacion", "perfil", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Perfil HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().datos.usuario).to.have.property('rol');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Perfil autenticado - formato",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/autenticacion/perfil/", "host": ["{{base_url}}"], "path": ["api", "v1", "autenticacion", "perfil", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Perfil HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().datos.usuario).to.have.property('correo');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Actualizar cookie CSRF",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "text/html" }],
+            "url": { "raw": "{{base_url}}/api/docs/", "host": ["{{base_url}}"], "path": ["api", "docs", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('CSRF disponible', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cerrar sesión",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-CSRFToken", "value": "{{csrf_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/autenticacion/cerrar-sesion/", "host": ["{{base_url}}"], "path": ["api", "v1", "autenticacion", "cerrar-sesion", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Sesión cerrada', () => pm.expect([200, 204]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Solicitar recuperación - correo inexistente",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"correo\":\"no-existe-{{$timestamp}}@example.com\"}" },
+            "url": { "raw": "{{base_url}}/api/v1/autenticacion/solicitar-recuperacion/", "host": ["{{base_url}}"], "path": ["api", "v1", "autenticacion", "solicitar-recuperacion", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Respuesta anti-enumeración', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().datos).to.eql({});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Confirmar recuperación - token inválido",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"token\":\"token-invalido\",\"nueva_contrasena\":\"NuevaSegura1!\"}" },
+            "url": { "raw": "{{base_url}}/api/v1/autenticacion/confirmar-recuperacion/", "host": ["{{base_url}}"], "path": ["api", "v1", "autenticacion", "confirmar-recuperacion", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "pm.expect(pm.response.json().error.codigo).to.eql('TOKEN_INVALIDO');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "B - Instituciones",
+      "item": [
+        {
+          "name": "Registrar institución pendiente",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"nombre\":\"Colegio API {{$timestamp}}\",\"ruc\":\"0999999999001\",\"direccion\":\"Av. API\",\"telefono\":\"0999999999\",\"correo\":\"colegio.api.{{$timestamp}}@example.com\",\"responsable\":\"Responsable API\",\"admin_escolar\":{\"correo\":\"admin.api.{{$timestamp}}@example.com\",\"cedula\":\"1710000090\",\"nombres\":\"Admin\",\"apellidos\":\"API\",\"telefono\":\"0999999998\"}}"
+            },
+            "url": { "raw": "{{base_url}}/api/v1/instituciones/", "host": ["{{base_url}}"], "path": ["api", "v1", "instituciones", ""] }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('registro_suffix', Date.now().toString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Institución creada', () => pm.response.to.have.status(201));",
+                  "const j = pm.response.json();",
+                  "pm.environment.set('registro_institucion_id', j.datos.institucion.id);",
+                  "pm.environment.set('institucion_id', j.datos.institucion.id);",
+                  "pm.environment.set('registro_admin_correo', j.datos.admin_escolar.correo);",
+                  "pm.environment.set('registro_admin_password', j.datos.admin_escolar.contrasena_temporal);",
+                  "pm.expect(j.datos.institucion.estado).to.eql('PENDIENTE_APROBACION');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login de ADMIN_SISTEMA para aprobación",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"correo\":\"{{admin_sistema_correo}}\",\"contrasena\":\"{{seed_password}}\"}" },
+            "url": { "raw": "{{base_url}}/api/v1/autenticacion/ingresar/", "host": ["{{base_url}}"], "path": ["api", "v1", "autenticacion", "ingresar", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ADMIN_SISTEMA autenticado', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar instituciones pendientes - ADMIN_SISTEMA",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/instituciones/pendientes/", "host": ["{{base_url}}"], "path": ["api", "v1", "instituciones", "pendientes", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Pendientes HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().datos).to.be.an('array');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Aprobar institución",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"aprobada\":true,\"motivo\":\"Validación de prueba\"}" },
+            "url": { "raw": "{{base_url}}/api/v1/instituciones/{{registro_institucion_id}}/aprobar/", "host": ["{{base_url}}"], "path": ["api", "v1", "instituciones", "{{registro_institucion_id}}", "aprobar", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Aprobación HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().datos.estado).to.eql('ACTIVA');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login del ADMIN_ESCOLAR registrado",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"correo\":\"{{registro_admin_correo}}\",\"contrasena\":\"{{registro_admin_password}}\"}" },
+            "url": { "raw": "{{base_url}}/api/v1/autenticacion/ingresar/", "host": ["{{base_url}}"], "path": ["api", "v1", "autenticacion", "ingresar", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ADMIN_ESCOLAR autenticado', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().datos.usuario.rol).to.eql('ADMIN_ESCOLAR');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mi institución - ADMIN_ESCOLAR",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/instituciones/mi-institucion/", "host": ["{{base_url}}"], "path": ["api", "v1", "instituciones", "mi-institucion", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Mi institución HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().datos.id).to.eql(Number(pm.environment.get('registro_institucion_id')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Actualizar mi institución",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"telefono\":\"0991112222\",\"direccion\":\"Av. API actualizada\"}" },
+            "url": { "raw": "{{base_url}}/api/v1/instituciones/mi-institucion/", "host": ["{{base_url}}"], "path": ["api", "v1", "instituciones", "mi-institucion", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Institución actualizada', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().datos.telefono).to.eql('0991112222');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear curso",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"nombre\":\"Curso API {{$timestamp}}\",\"hora_salida\":\"14:00:00\",\"activo\":true}" },
+            "url": { "raw": "{{base_url}}/api/v1/instituciones/cursos/", "host": ["{{base_url}}"], "path": ["api", "v1", "instituciones", "cursos", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Curso creado', () => pm.response.to.have.status(201));",
+                  "pm.environment.set('curso_id', pm.response.json().datos.id);",
+                  "pm.expect(pm.response.json().datos.institucion_id).to.eql(Number(pm.environment.get('registro_institucion_id')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar cursos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/instituciones/cursos/", "host": ["{{base_url}}"], "path": ["api", "v1", "instituciones", "cursos", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Cursos HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().datos).to.be.an('array');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear puerta",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"nombre\":\"Puerta API {{$timestamp}}\",\"activa\":true}" },
+            "url": { "raw": "{{base_url}}/api/v1/instituciones/puertas/", "host": ["{{base_url}}"], "path": ["api", "v1", "instituciones", "puertas", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Puerta creada', () => pm.response.to.have.status(201));",
+                  "pm.environment.set('puerta_id', pm.response.json().datos.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar puertas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/instituciones/puertas/", "host": ["{{base_url}}"], "path": ["api", "v1", "instituciones", "puertas", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Puertas HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().datos).to.be.an('array');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "B - Cuentas",
+      "item": [
+        {
+          "name": "Crear usuario PADRE",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"correo\":\"padre.api.{{$timestamp}}@example.com\",\"cedula\":\"1710000066\",\"nombres\":\"Padre\",\"apellidos\":\"API\",\"telefono\":\"0990000000\",\"rol\":\"PADRE\"}" },
+            "url": { "raw": "{{base_url}}/api/v1/cuentas/usuarios/", "host": ["{{base_url}}"], "path": ["api", "v1", "cuentas", "usuarios", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Usuario creado', () => pm.response.to.have.status(201));",
+                  "const j = pm.response.json();",
+                  "pm.environment.set('usuario_padre_id', j.datos.usuario.id);",
+                  "pm.expect(j.datos.usuario.contrasena_temporal).to.eql(true);",
+                  "pm.expect(j.datos.contrasena_temporal).to.be.a('string');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear usuario GUARDIA",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"correo\":\"guardia.api.{{$timestamp}}@example.com\",\"cedula\":\"1710000074\",\"nombres\":\"Guardia\",\"apellidos\":\"API\",\"telefono\":\"0990000001\",\"rol\":\"GUARDIA\",\"puerta_id\":null}" },
+            "url": { "raw": "{{base_url}}/api/v1/cuentas/usuarios/", "host": ["{{base_url}}"], "path": ["api", "v1", "cuentas", "usuarios", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Guardia creado', () => pm.response.to.have.status(201));",
+                  "pm.environment.set('usuario_guardia_id', pm.response.json().datos.usuario.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar usuarios de la institución",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/cuentas/usuarios/?rol=PADRE", "host": ["{{base_url}}"], "path": ["api", "v1", "cuentas", "usuarios", ""], "query": [{ "key": "rol", "value": "PADRE" }] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Usuarios HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().datos).to.be.an('array');",
+                  "pm.response.json().datos.forEach(u => pm.expect(u.rol).to.eql('PADRE'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear estudiante",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"cedula\":\"1710000082\",\"nombres\":\"Estudiante\",\"apellidos\":\"API\",\"fecha_nacimiento\":\"2015-05-10\",\"curso_id\":{{curso_id}},\"hora_salida_especial\":null}" },
+            "url": { "raw": "{{base_url}}/api/v1/cuentas/estudiantes/", "host": ["{{base_url}}"], "path": ["api", "v1", "cuentas", "estudiantes", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estudiante creado', () => pm.response.to.have.status(201));",
+                  "pm.environment.set('estudiante_id', pm.response.json().datos.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar estudiantes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/cuentas/estudiantes/", "host": ["{{base_url}}"], "path": ["api", "v1", "cuentas", "estudiantes", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estudiantes HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().datos).to.be.an('array');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear relación padre-estudiante",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"padre\":{{usuario_padre_id}},\"estudiante\":{{estudiante_id}},\"vigente\":true}" },
+            "url": { "raw": "{{base_url}}/api/v1/cuentas/relaciones-padre-estudiante/", "host": ["{{base_url}}"], "path": ["api", "v1", "cuentas", "relaciones-padre-estudiante", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Relación creada', () => pm.response.to.have.status(201));",
+                  "pm.environment.set('relacion_id', pm.response.json().datos.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar relaciones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/cuentas/relaciones-padre-estudiante/", "host": ["{{base_url}}"], "path": ["api", "v1", "cuentas", "relaciones-padre-estudiante", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Relaciones HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().datos).to.be.an('array');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Eliminar relación",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/cuentas/relaciones-padre-estudiante/{{relacion_id}}/", "host": ["{{base_url}}"], "path": ["api", "v1", "cuentas", "relaciones-padre-estudiante", "{{relacion_id}}", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Relación eliminada', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear estudiante con curso de otra institución",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"cedula\":\"1710000090\",\"nombres\":\"Invalido\",\"apellidos\":\"API\",\"fecha_nacimiento\":\"2015-05-10\",\"curso_id\":999999}" },
+            "url": { "raw": "{{base_url}}/api/v1/cuentas/estudiantes/", "host": ["{{base_url}}"], "path": ["api", "v1", "cuentas", "estudiantes", ""] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Curso ajeno rechazado', () => pm.expect([400, 409]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

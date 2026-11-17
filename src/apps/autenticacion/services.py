@@ -85,6 +85,16 @@ def autenticar(request, correo, contrasena):
     if user and user.estado in (Usuario.Estado.BLOQUEADA, Usuario.Estado.SUSPENDIDA):
         _registrar_auditoria(user, "INGRESO_RECHAZADO", "FALLO", {"motivo": user.estado})
         return None, "La cuenta no está disponible."
+    if user and user.rol == "ADMIN_ESCOLAR" and user.institucion_id:
+        institucion = Institucion.objects.filter(pk=user.institucion_id).only("estado").first()
+        if not institucion or institucion.estado != Institucion.Estado.ACTIVA:
+            _registrar_auditoria(
+                user,
+                "INGRESO_RECHAZADO",
+                "FALLO",
+                {"motivo": "institucion_no_activa"},
+            )
+            return None, "La institución todavía no está activa."
 
     autenticado = authenticate(request, username=correo, password=contrasena)
     if autenticado is None:
