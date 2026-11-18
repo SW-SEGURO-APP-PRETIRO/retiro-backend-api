@@ -45,7 +45,7 @@ class UsuarioListCreateView(APIView):
         if request.user.rol == Rol.ADMIN_SISTEMA:
             queryset = Usuario._base_manager.all()
         else:
-            queryset = Usuario.objects.filter(
+            queryset = Usuario.objects.de_institucion(request.user.institucion_id).filter(
                 rol__in=[Rol.PADRE, Rol.GUARDIA, Rol.CUIDADOR_FIJO]
             )
         rol = request.query_params.get("rol")
@@ -80,7 +80,7 @@ class UsuarioDetailView(APIView):
     def get_object(self, request, pk):
         if request.user.rol == Rol.ADMIN_SISTEMA:
             return Usuario._base_manager.get(pk=pk)
-        return Usuario.objects.get(pk=pk)
+        return Usuario.objects.de_institucion(request.user.institucion_id).get(pk=pk)
 
     @extend_schema(tags=["Cuentas"], request=None, responses=UsuarioSerializer, operation_id="cuentas_usuario_detail")
     def get(self, request, pk):

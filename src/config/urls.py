@@ -12,6 +12,7 @@ def salud(request):
 
 
 urlpatterns = [
+    path("", include("apps.panel_escolar.urls")),
     path("salud/", salud, name="salud"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),

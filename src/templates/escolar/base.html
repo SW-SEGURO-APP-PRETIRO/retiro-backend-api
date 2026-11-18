@@ -1,0 +1,18 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f2f5f4"><meta name="robots" content="noindex,nofollow">
+  <title>{{ title|default:"Acceso restringido" }} · Retiro Seguro</title>
+  <link rel="icon" href="{% static 'escolar/mark.svg' %}" type="image/svg+xml">
+  <link rel="stylesheet" href="{% static 'escolar/panel.css' %}">
+  {% block head %}{% endblock %}
+</head>
+<body data-page="{{ page }}" data-auth="{{ mode }}" data-preview="{{ preview|yesno:'true,false' }}">
+  <a class="skip-link" href="#main">Saltar al contenido</a>
+  {% if preview %}<div class="preview-banner">Vista previa local · Datos ficticios · No conectada a SQL Server</div>{% endif %}
+  {% block body %}{% endblock %}
+  <div id="toast" class="toast" role="status" hidden></div>
+  {% block scripts %}{% endblock %}
+</body></html>

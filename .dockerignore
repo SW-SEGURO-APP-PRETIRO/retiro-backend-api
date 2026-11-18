@@ -1,0 +1,14 @@
+.git
+.venv
+venv
+.env
+.env.*
+!.env.example
+*.sqlite3
+*.sqlite3-*
+**/__pycache__
+.pytest_cache
+.taste-skill
+artifacts
+node_modules
+*.log

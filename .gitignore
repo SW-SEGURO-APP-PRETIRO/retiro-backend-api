@@ -21,6 +21,9 @@ htmlcov/
 # Artefactos
 staticfiles/
 *.log
+.taste-skill/
+artifacts/
+*.sqlite3-*
 
 #.md
 p-*.md

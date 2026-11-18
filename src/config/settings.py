@@ -47,6 +47,7 @@ AUTH_USER_MODEL = "cuentas.Usuario"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -177,6 +178,9 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "/static/"
+STATICFILES_DIRS = [BASE_DIR / "static"]
+# Assets del panel disponibles también detrás de Daphne/Caddy, con DEBUG=False.
+WHITENOISE_USE_FINDERS = True
 STATIC_ROOT = BASE_DIR.parent / "staticfiles"
 
 LOGGING = {
