@@ -1,10 +1,14 @@
 """ASGI: HTTP y WebSocket en el mismo proyecto."""
 import os
 
+from django.contrib.staticfiles.handlers import ASGIStaticFilesHandler
 from django.core.asgi import get_asgi_application
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django_asgi_app = get_asgi_application()  # debe inicializarse antes de importar el routing
+# Daphne no sirve archivos estáticos por sí solo (runserver sí): este envoltorio entrega src/static
+# (CSS y JS de la interfaz). Para mucho tráfico en producción conviene servirlos desde el proxy.
+django_asgi_app = ASGIStaticFilesHandler(django_asgi_app)
 
 from channels.auth import AuthMiddlewareStack  # noqa: E402
 from channels.routing import ProtocolTypeRouter, URLRouter  # noqa: E402

@@ -196,3 +196,108 @@ def crear_cuenta_cuidador_fijo(actor, *, correo, cedula, nombres, apellidos, tel
     usuario.expira_temporal = timezone.now() + timedelta(hours=48)
     usuario.save(update_fields=["contrasena_temporal", "expira_temporal"])
     return usuario, contrasena
+
+
+# ---------------------------------------------------------------------------------------------
+# Apoyo a las pantallas web: consultas de solo lectura y eliminación segura de estudiantes.
+# ---------------------------------------------------------------------------------------------
+def nombres_usuarios(ids):
+    """{id: {"nombre": "Nombres Apellidos", "rol": ROL}} de las cuentas indicadas."""
+    filas = Usuario._base_manager.filter(pk__in=list(ids)).values_list("pk", "nombres", "apellidos", "rol")
+    return {pk: {"nombre": f"{nombres} {apellidos}".strip(), "rol": rol} for pk, nombres, apellidos, rol in filas}
+
+
+def estudiantes_visibles(usuario):
+    """Estudiantes que `usuario` puede consultar (siempre dentro de su institución).
+
+    - ADMIN_ESCOLAR: todos los de su institución.
+    - PADRE: solo sus hijos con relación vigente.
+    - Otros roles: ninguno.
+    """
+    if usuario.rol == Rol.ADMIN_ESCOLAR:
+        return Estudiante._base_manager.filter(institucion_id=usuario.institucion_id)
+    if usuario.rol == Rol.PADRE:
+        return Estudiante._base_manager.filter(
+            institucion_id=usuario.institucion_id,
+            representantes__padre_id=usuario.pk,
+            representantes__vigente=True,
+        )
+    return Estudiante._base_manager.none()
+
+
+def representantes_de(estudiante):
+    """Relaciones padre-estudiante (con el padre cargado) de un estudiante."""
+    return (
+        RelacionPadreEstudiante._base_manager.filter(
+            institucion_id=estudiante.institucion_id, estudiante_id=estudiante.pk
+        )
+        .select_related("padre")
+        .order_by("padre__apellidos", "padre__nombres")
+    )
+
+
+def resumen_institucion(institucion_id):
+    """Indicadores de cuentas de una institución (para el panel del Administrador Escolar)."""
+    estudiantes = Estudiante._base_manager.filter(institucion_id=institucion_id)
+    usuarios = Usuario._base_manager.filter(institucion_id=institucion_id)
+    return {
+        "estudiantes_activos": estudiantes.filter(estado=Estudiante.Estado.ACTIVO).count(),
+        "estudiantes_inactivos": estudiantes.filter(estado=Estudiante.Estado.INACTIVO).count(),
+        "padres": usuarios.filter(rol=Rol.PADRE).count(),
+        "guardias": usuarios.filter(rol=Rol.GUARDIA).count(),
+        "cuidadores_fijos": usuarios.filter(rol=Rol.CUIDADOR_FIJO).count(),
+        "pendientes": usuarios.filter(estado=Usuario.Estado.PENDIENTE).count(),
+    }
+
+
+def resumen_global():
+    """Indicadores de cuentas de todo el sistema (para el Administrador del Sistema)."""
+    from django.db.models import Count
+
+    por_rol = {f["rol"]: f["total"] for f in Usuario._base_manager.values("rol").annotate(total=Count("id"))}
+    return {
+        "usuarios": sum(por_rol.values()),
+        "por_rol": por_rol,
+        "bloqueadas": Usuario._base_manager.filter(estado=Usuario.Estado.BLOQUEADA).count(),
+        "estudiantes": Estudiante._base_manager.count(),
+    }
+
+
+def eliminar_estudiante(actor, estudiante):
+    """Elimina un estudiante solo si no tiene historia asociada; si la tiene, hay que inactivarlo.
+
+    Los demás módulos referencian al estudiante por id (sin clave foránea), así que la base de datos
+    no impide dejar registros huérfanos: la comprobación se hace aquí. Lanza ValueError con un
+    mensaje apto para mostrar al usuario.
+    """
+    # Importes locales: `cuentas` es la dueña del ciclo de vida del estudiante, pero los módulos de
+    # arriba (cuidadores, retiros) dependen de ella; así se evita el ciclo al cargar.
+    from apps.cuidadores.models import AutorizacionCuidador
+    from apps.retiros.models import PaseEstudiante, Retiro
+
+    if estudiante.institucion_id != actor.institucion_id:
+        raise PermissionError("El estudiante no pertenece a su institución.")
+    motivos = []
+    if RelacionPadreEstudiante._base_manager.filter(estudiante_id=estudiante.pk).exists():
+        motivos.append("tiene representantes vinculados")
+    if AutorizacionCuidador._base_manager.filter(estudiante_id=estudiante.pk).exists():
+        motivos.append("tiene autorizaciones de cuidadores")
+    if (
+        Retiro._base_manager.filter(estudiante_id=estudiante.pk).exists()
+        or PaseEstudiante._base_manager.filter(estudiante_id=estudiante.pk).exists()
+    ):
+        motivos.append("tiene historial de retiros")
+    if motivos:
+        raise ValueError(
+            "No se puede eliminar: " + ", ".join(motivos) + ". Márquelo como inactivo para conservar el historial."
+        )
+    estudiante_id = estudiante.pk
+    with transaction.atomic():
+        estudiante.delete()
+        _registrar_auditoria(
+            actor,
+            "ESTUDIANTE_ELIMINADO",
+            "EXITO",
+            {"estudiante_id": estudiante_id},
+            categoria=EventoAuditoria.Categoria.OPERATIVA,
+        )

@@ -1,0 +1,84 @@
+{% extends "base.html" %}{% block title %}Chat institucional{% endblock %}{% block content %}<div class="page-heading"><div><div class="eyebrow">COMUNICACIÓN</div><h1>Chat institucional</h1><p class="muted">Sala general · Mensajes persistidos por 90 días</p></div><span id="chat-status" class="status-dot">Conectando…</span></div><section class="chat-card"><div id="chat-messages" class="chat-messages" aria-live="polite"></div><form id="chat-form" class="chat-form">{% csrf_token %}<input id="chat-input" maxlength="2000" autocomplete="off" placeholder="Escribe un mensaje…" required><button class="button button-primary" type="submit">Enviar</button></form></section><script>
+(() => {
+  const messages = document.getElementById("chat-messages");
+  const status = document.getElementById("chat-status");
+  const input = document.getElementById("chat-input");
+  const currentUserId = {{ request.user.pk }};
+  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+  let socket = null;
+  let reconnectTimer = null;
+  let reconnectDelay = 1000;
+  let pingTimer = null;
+  const seenMessages = new Set();
+
+  const add = (message) => {
+    if (seenMessages.has(message.id)) return;
+    seenMessages.add(message.id);
+    const item = document.createElement("article");
+    item.className = `chat-message ${message.autor_id === currentUserId ? "own" : ""}`;
+    item.innerHTML = `<strong></strong><time></time><p></p>`;
+    item.querySelector("strong").textContent = message.autor;
+    item.querySelector("time").textContent = new Date(message.enviado_en).toLocaleString();
+    item.querySelector("p").textContent = message.contenido;
+    messages.appendChild(item);
+    messages.scrollTop = messages.scrollHeight;
+  };
+
+  const connect = () => {
+    if (socket && socket.readyState < 2) return;
+    socket = new WebSocket(`${protocol}://${window.location.host}/ws/chat/general/`);
+
+    socket.onopen = () => {
+      reconnectDelay = 1000;
+      status.textContent = "Conectado";
+      status.classList.add("online");
+      clearInterval(pingTimer);
+      pingTimer = setInterval(() => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({evento: "ping"}));
+        }
+      }, 25000);
+    };
+
+    socket.onclose = () => {
+      clearInterval(pingTimer);
+      status.textContent = "Reconectando…";
+      status.classList.remove("online");
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(connect, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 2, 10000);
+    };
+
+    socket.onerror = () => {
+      status.textContent = "Problema de conexión";
+      status.classList.remove("online");
+    };
+
+    socket.onmessage = (event) => {
+      let data;
+      try {
+        data = JSON.parse(event.data);
+      } catch (_) {
+        return;
+      }
+      if (data.evento === "historial") data.mensajes.forEach(add);
+      if (data.evento === "mensaje") add(data.mensaje);
+      if (data.evento === "error") status.textContent = data.mensaje;
+    };
+  };
+
+  document.getElementById("chat-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (socket.readyState !== WebSocket.OPEN || !input.value.trim()) return;
+    socket.send(JSON.stringify({evento: "mensaje", contenido: input.value}));
+    input.value = "";
+  });
+
+  window.addEventListener("beforeunload", () => {
+    clearInterval(pingTimer);
+    clearTimeout(reconnectTimer);
+  });
+
+  connect();
+})();
+</script>{% endblock %}

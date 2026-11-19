@@ -70,6 +70,8 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                # Datos del usuario para la barra superior y el menú lateral (interfaz web)
+                "shared.web.context.sitio",
             ],
         },
     },
@@ -177,6 +179,7 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "/static/"
+STATICFILES_DIRS = [BASE_DIR / "static"]  # CSS y JavaScript de la interfaz web (src/static)
 STATIC_ROOT = BASE_DIR.parent / "staticfiles"
 
 LOGGING = {

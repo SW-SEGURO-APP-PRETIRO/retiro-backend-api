@@ -12,6 +12,10 @@ def salud(request):
 
 
 urlpatterns = [
+    path("", include("shared.web.urls")),
+    path("autenticacion/", include("apps.autenticacion.web_urls")),
+    path("cuentas/", include("apps.cuentas.web_urls")),
+    path("chat/", include("apps.chat.web_urls")),
     path("salud/", salud, name="salud"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),

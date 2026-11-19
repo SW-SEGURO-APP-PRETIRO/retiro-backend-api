@@ -122,3 +122,74 @@ def guardar_puerta(usuario, datos, puerta=None):
         puerta.save()
         return puerta
     return Puerta.objects.create(institucion_id=usuario.institucion_id, **datos)
+
+
+# ---------------------------------------------------------------------------------------------
+# Consultas para otros módulos y para las pantallas web (solo lectura, filtradas por institución).
+# ---------------------------------------------------------------------------------------------
+def institucion_activa(institucion_id):
+    return Institucion.objects.filter(pk=institucion_id, estado=Institucion.Estado.ACTIVA).exists()
+
+
+def nombre_institucion(institucion_id):
+    return Institucion.objects.filter(pk=institucion_id).values_list("nombre", flat=True).first() or ""
+
+
+def ruc_en_uso(ruc):
+    return Institucion.objects.filter(ruc=ruc).exists()
+
+
+def correo_institucion_en_uso(correo):
+    return Institucion.objects.filter(correo__iexact=correo).exists()
+
+
+def cursos_activos(institucion_id, incluir_id=None):
+    """[(id, nombre)] de los cursos activos de la institución (más `incluir_id`, aunque esté inactivo)."""
+    qs = Curso._base_manager.filter(institucion_id=institucion_id)
+    if incluir_id:
+        qs = qs.filter(models_q_activo_o_id(incluir_id))
+    else:
+        qs = qs.filter(activo=True)
+    return list(qs.order_by("nombre").values_list("pk", "nombre"))
+
+
+def models_q_activo_o_id(curso_id):
+    from django.db.models import Q
+
+    return Q(activo=True) | Q(pk=curso_id)
+
+
+def nombres_cursos(institucion_id):
+    """{id: nombre} de todos los cursos de la institución."""
+    return dict(Curso._base_manager.filter(institucion_id=institucion_id).values_list("pk", "nombre"))
+
+
+def contar_cursos(institucion_id):
+    return Curso._base_manager.filter(institucion_id=institucion_id, activo=True).count()
+
+
+def nombre_puerta(institucion_id, puerta_id):
+    if not puerta_id:
+        return ""
+    return (
+        Puerta._base_manager.filter(institucion_id=institucion_id, pk=puerta_id)
+        .values_list("nombre", flat=True)
+        .first()
+        or ""
+    )
+
+
+def listar_pendientes():
+    return Institucion.objects.filter(estado=Institucion.Estado.PENDIENTE_APROBACION).order_by("creada_en")
+
+
+def obtener_institucion(pk):
+    return Institucion.objects.filter(pk=pk).first()
+
+
+def resumen_instituciones():
+    """{estado: cantidad} de todas las instituciones (para el Administrador del Sistema)."""
+    from django.db.models import Count
+
+    filas = Institucion.objects.values("estado").annotate(total=Count("id"))
+    return {fila["estado"]: fila["total"] for fila in filas}

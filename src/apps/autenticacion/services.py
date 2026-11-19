@@ -137,7 +137,8 @@ def autenticar(request, correo, contrasena):
                 _notificar_bloqueo_de_cuenta(user)
         return None, "Credenciales inválidas."
 
-    codigo_totp = request.data.get("codigo_totp", "")
+    datos_solicitud = getattr(request, "data", request.POST)
+    codigo_totp = datos_solicitud.get("codigo_totp", "")
     if autenticado.totp_secreto_cifrado:
         if not codigo_totp:
             return None, "La cuenta requiere un código TOTP."
@@ -207,3 +208,35 @@ def confirmar_recuperacion(token, nueva_contrasena):
         registro.usado_en = timezone.now()
         registro.save(update_fields=["usado_en"])
     _registrar_auditoria(usuario, "RECUPERACION_CONTRASENA", "EXITO", {})
+
+
+# ---------------------------------------------------------------------------------------------
+# Apoyo a las pantallas web (HTML). No cambian el comportamiento de la API.
+# ---------------------------------------------------------------------------------------------
+def token_recuperacion_valido(token):
+    """True si el token existe, no se usó y no ha expirado (no consume el token)."""
+    if not token:
+        return False
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return TokenRecuperacion.objects.filter(
+        hash_token=token_hash, usado_en__isnull=True, expira_en__gt=timezone.now()
+    ).exists()
+
+
+def registrar_institucion_con_contrasena(datos, contrasena):
+    """Registro público: institución (pendiente de aprobación) + su Administrador Escolar.
+
+    Reutiliza `registrar_institucion` (misma lógica, bitácora y notificación al Administrador del
+    Sistema), pero el administrador elige su contraseña en lugar de recibir una temporal. Todo
+    ocurre en una sola transacción: si algo falla, no queda nada a medias. La cuenta sigue en
+    estado PENDIENTE hasta que el Administrador del Sistema apruebe la institución.
+    """
+    from apps.instituciones.services import registrar_institucion  # import local: evita ciclo
+
+    with transaction.atomic():
+        institucion, usuario, _temporal = registrar_institucion(datos)
+        usuario.set_password(contrasena)  # Argon2
+        usuario.contrasena_temporal = False
+        usuario.expira_temporal = None
+        usuario.save(update_fields=["password", "contrasena_temporal", "expira_temporal"])
+    return institucion, usuario
