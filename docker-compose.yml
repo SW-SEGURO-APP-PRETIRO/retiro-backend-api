@@ -8,7 +8,7 @@ services:
     # La BD NO se publica al host por defecto. Para conectar SSMS/DBeaver
     # descomenta el puerto (solo en tu máquina, nunca en un servidor):
     #ports:
-      #- "127.0.0.1:1433:1433"
+    #  - "127.0.0.1:1433:1433"
     volumes:
       - sqlserver_data:/var/opt/mssql
     healthcheck:

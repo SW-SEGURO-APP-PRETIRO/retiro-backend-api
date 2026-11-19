@@ -32,12 +32,12 @@ Usuario: admin.sistema@retiroseguro.test
 Contraseña: ClaveDemo*2026
 
 Admin escolar:
-admin1@colegio1.test
-admin2@colegio2.test
+maria.cardenas@ue-los-alisos.edu.ec
+paola.moreno@colegio-nuevo-mundo.edu.ec
 
 Instituciones:
-Unidad Educativa Demo Norte
-Colegio Demo Sur
+Unidad Educativa Los Alisos
+Colegio Nuevo Mundo
 ```
 
 ## Importar en Postman

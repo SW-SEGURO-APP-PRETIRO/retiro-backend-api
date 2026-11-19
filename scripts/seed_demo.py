@@ -68,32 +68,87 @@ def sembrar(clave: str | None = None) -> dict:
     with sin_filtro():  # proceso interno: la semilla escribe en varias instituciones
         usuario("admin.sistema@retiroseguro.test", Rol.ADMIN_SISTEMA, None, 1, "Admin", "Sistema")
 
-        for i, nombre in ((1, "Unidad Educativa Demo Norte"), (2, "Colegio Demo Sur")):
+        instituciones = (
+            {
+                "correo": "administracion@ue-los-alisos.edu.ec",
+                "nombre": "Unidad Educativa Los Alisos",
+                "ruc_base": "179100001",
+                "direccion": "Av. Los Shyris N35-120 y Suecia, Quito",
+                "telefono": "022601420",
+                "responsable": "Lic. María Fernanda Cárdenas",
+                "admin": ("maria.cardenas@ue-los-alisos.edu.ec", "María Fernanda", "Cárdenas"),
+                "padre": ("carolina.andrade@ejemplo.ec", "Carolina Isabel", "Andrade López"),
+                "guardia": ("jorge.herrera@ue-los-alisos.edu.ec", "Jorge Luis", "Herrera"),
+                "cuidador": ("ricardo.zambrano@ue-los-alisos.edu.ec", "Ricardo Javier", "Zambrano"),
+                "cursos": (
+                    ("Segundo de Básica A", time(13, 0)),
+                    ("Cuarto de Básica A", time(13, 30)),
+                    ("Séptimo de Básica A", time(14, 0)),
+                ),
+                "estudiantes": (
+                    ("Mateo Sebastián", "Andrade Cárdenas", date(2019, 5, 14)),
+                    ("Valentina Daniela", "Torres Andrade", date(2017, 8, 22)),
+                    ("Samuel Nicolás", "Vega Andrade", date(2014, 2, 9)),
+                ),
+            },
+            {
+                "correo": "administracion@colegio-nuevo-mundo.edu.ec",
+                "nombre": "Colegio Nuevo Mundo",
+                "ruc_base": "179200001",
+                "direccion": "Cdla. Kennedy Norte, calle 8ava y Av. del Ejército, Guayaquil",
+                "telefono": "042318560",
+                "responsable": "MSc. Paola Alejandra Moreno",
+                "admin": ("paola.moreno@colegio-nuevo-mundo.edu.ec", "Paola Alejandra", "Moreno"),
+                "padre": ("diego.loor@ejemplo.ec", "Diego Fernando", "Loor"),
+                "guardia": ("luis.velez@colegio-nuevo-mundo.edu.ec", "Luis Fernando", "Vélez"),
+                "cuidador": ("gabriela.munoz@colegio-nuevo-mundo.edu.ec", "Gabriela Carolina", "Muñoz"),
+                "cursos": (
+                    ("Primero de Básica B", time(12, 30)),
+                    ("Tercero de Básica B", time(13, 0)),
+                    ("Octavo de Básica B", time(13, 30)),
+                ),
+                "estudiantes": (
+                    ("Sofía Isabella", "Pérez Loor", date(2020, 3, 18)),
+                    ("Santiago Gabriel", "Mendoza Vera", date(2018, 10, 5)),
+                    ("Emilia Antonella", "García Reyes", date(2015, 6, 27)),
+                ),
+            },
+        )
+
+        for i, datos in enumerate(instituciones, start=1):
             inst, _ = Institucion.objects.get_or_create(
-                correo=f"contacto{i}@colegio{i}.test",
+                correo=datos["correo"],
                 defaults=dict(
-                    nombre=nombre, ruc=_ruc(f"179{i:02d}0001"), direccion="Dirección ficticia 100",
-                    telefono="022000000", responsable=f"Responsable {i}",
+                    nombre=datos["nombre"], ruc=_ruc(datos["ruc_base"]), direccion=datos["direccion"],
+                    telefono=datos["telefono"], responsable=datos["responsable"],
                     estado=Institucion.Estado.ACTIVA, aprobada_en=timezone.now(),
                 ),
             )
             puerta, _ = Puerta.objects.get_or_create(institucion_id=inst.id, nombre="Puerta principal")
             cursos = [
                 Curso.objects.get_or_create(institucion_id=inst.id, nombre=n, defaults={"hora_salida": h})[0]
-                for n, h in (("1ro A", time(13, 0)), ("2do A", time(13, 30)))
+                for n, h in datos["cursos"]
             ]
 
-            usuario(f"admin{i}@colegio{i}.test", Rol.ADMIN_ESCOLAR, inst, 1, "Ana", f"Admin{i}")
-            padre = usuario(f"padre{i}@colegio{i}.test", Rol.PADRE, inst, 2, "Pedro", f"Padre{i}")
-            usuario(f"guardia{i}@colegio{i}.test", Rol.GUARDIA, inst, 3, "Gloria", f"Guardia{i}",
-                    puerta_id=puerta.id)
-            usuario(f"cuidador{i}@colegio{i}.test", Rol.CUIDADOR_FIJO, inst, 4, "Carlos", f"Cuidador{i}")
+            admin_correo, admin_nombres, admin_apellidos = datos["admin"]
+            usuario(admin_correo, Rol.ADMIN_ESCOLAR, inst, 1, admin_nombres, admin_apellidos)
+            padre_correo, padre_nombres, padre_apellidos = datos["padre"]
+            padre = usuario(padre_correo, Rol.PADRE, inst, 2, padre_nombres, padre_apellidos)
+            guardia_correo, guardia_nombres, guardia_apellidos = datos["guardia"]
+            usuario(guardia_correo, Rol.GUARDIA, inst, 3, guardia_nombres, guardia_apellidos,
+                    telefono="0991234567", puerta_id=puerta.id)
+            cuidador_correo, cuidador_nombres, cuidador_apellidos = datos["cuidador"]
+            usuario(cuidador_correo, Rol.CUIDADOR_FIJO, inst, 4, cuidador_nombres, cuidador_apellidos,
+                    telefono="0987654321")
 
-            for k, (nom, curso) in enumerate((("Luis", cursos[0]), ("Sofía", cursos[1])), start=1):
+            for k, ((nombres, apellidos, fecha_nacimiento), curso) in enumerate(
+                zip(datos["estudiantes"], cursos),
+                start=1,
+            ):
                 est, _ = Estudiante.objects.get_or_create(
                     institucion_id=inst.id, cedula=_cedula(f"17{inst.id}10{k:04d}"),
-                    defaults=dict(nombres=nom, apellidos=f"Padre{i}", curso_id=curso.id,
-                                  fecha_nacimiento=date(2015 + k, 3, 10)),
+                    defaults=dict(nombres=nombres, apellidos=apellidos, curso_id=curso.id,
+                                  fecha_nacimiento=fecha_nacimiento),
                 )
                 RelacionPadreEstudiante.objects.get_or_create(
                     institucion_id=inst.id, padre=padre, estudiante=est)

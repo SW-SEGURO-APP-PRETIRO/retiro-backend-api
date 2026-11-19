@@ -54,7 +54,7 @@ Total en SQL Server: 26 tablas (las 20 de negocio más 6 propias de Django: sesi
 
 ### Datos de demostración
 
-`scripts/seed_demo.py` crea datos ficticios: 2 colegios, 9 usuarios (1 Administrador del Sistema y 4 por colegio: Admin Escolar, Padre, Guardia y Cuidador Fijo), cursos, puerta, 4 estudiantes y sus relaciones padre-hijo. Se puede ejecutar varias veces sin duplicar. **No carga** cuidadores, pases, retiros ni notificaciones: cada responsable agrega los datos de su módulo cuando tenga su lógica.
+`scripts/seed_demo.py` crea datos ficticios: 2 colegios, 9 usuarios (1 Administrador del Sistema y 4 por colegio: Admin Escolar, Padre, Guardia y Cuidador Fijo), cursos, puertas, 6 estudiantes y sus relaciones padre-hijo. Se puede ejecutar varias veces sin duplicar. **No carga** cuidadores temporales, pases ni retiros: cada responsable agrega los datos de su módulo cuando tenga su lógica.
 
 ### Diagrama E-R
 

@@ -22,15 +22,15 @@ def prepare():
     from django.utils import timezone
     from seed_demo import _cedula
     with sin_filtro():
-        colegio = Institucion.objects.get(correo="contacto1@colegio1.test")
-        admin = Usuario.objects.get(correo="admin1@colegio1.test")
-        padre = Usuario.objects.get(correo="padre1@colegio1.test")
+        colegio = Institucion.objects.get(correo="administracion@ue-los-alisos.edu.ec")
+        admin = Usuario.objects.get(correo="maria.cardenas@ue-los-alisos.edu.ec")
+        padre = Usuario.objects.get(correo="carolina.andrade@ejemplo.ec")
         student = Estudiante.objects.filter(institucion_id=colegio.pk).first()
-        cuidador, _ = Cuidador.objects.get_or_create(institucion_id=colegio.pk, cedula=_cedula("171600001"), defaults={"tipo":"FIJO", "nombres":"Lucía", "apellidos":"Mendoza", "correo":"lucia.mendoza@example.test", "telefono":"0990000000"})
+        cuidador, _ = Cuidador.objects.get_or_create(institucion_id=colegio.pk, cedula=_cedula("171600001"), defaults={"tipo":"FIJO", "nombres":"Lucía", "apellidos":"Mendoza Cevallos", "correo":"lucia.mendoza@ejemplo.ec", "telefono":"0990000000"})
         AutorizacionCuidador.objects.get_or_create(institucion_id=colegio.pk, cuidador=cuidador, estudiante_id=student.pk, defaults={"solicitada_por_id":padre.pk, "estado":"SOLICITADO", "solicitada_en":timezone.now(), "firma_hmac":"demo"})
         Notificacion.objects.get_or_create(institucion_id=colegio.pk, destinatario_id=admin.pk, tipo="SOLICITUD_CUIDADOR", defaults={"titulo":"Nueva solicitud de cuidador", "mensaje":"Una familia solicitó un nuevo acceso. Revisa la solicitud.", "referencia":cuidador.pk})
     print("Vista previa con datos ficticios: http://127.0.0.1:8000/escolar/")
-    print("Cuenta local: admin1@colegio1.test | Clave: VistaEscolar#2026")
+    print("Cuenta local: maria.cardenas@ue-los-alisos.edu.ec | Clave: VistaEscolar#2026")
 
 if __name__ == "__main__":
     prepare()
