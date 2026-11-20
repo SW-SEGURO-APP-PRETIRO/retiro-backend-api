@@ -45,6 +45,10 @@ class SolicitarAutorizacionSerializer(serializers.Serializer):
     estudiante_id = serializers.IntegerField(min_value=1)
 
 
+class RechazarAutorizacionSerializer(serializers.Serializer):
+    motivo = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+
+
 class AutorizacionSerializer(serializers.ModelSerializer):
     cuidador = CuidadorSerializer(read_only=True)
     estudiante_nombre = serializers.SerializerMethodField()
@@ -63,6 +67,9 @@ class AutorizacionSerializer(serializers.ModelSerializer):
             "acceso_emitido_por_id",
             "acceso_emitido_en",
             "revocada_en",
+            "rechazada_por_id",
+            "rechazada_en",
+            "motivo_rechazo",
         ]
         read_only_fields = fields
 

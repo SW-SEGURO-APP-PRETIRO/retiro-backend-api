@@ -50,12 +50,35 @@ export function human(value) {
     ACTIVA: "Activa",
     INACTIVO: "Inactivo",
     REVOCADO: "Revocado",
+    RECHAZADO: "Rechazado",
     EXPIRADO: "Expirado",
     PENDIENTE: "Pendiente",
     BLOQUEADA: "Bloqueada",
     SUSPENDIDA: "Suspendida",
     EXITO: "Exitoso",
     FALLO: "Fallido",
+    ESTUDIANTE_CREADO: "Estudiante registrado",
+    ESTUDIANTE_ACTUALIZADO: "Estudiante actualizado",
+    USUARIO_CREADO: "Cuenta creada",
+    USUARIO_ACTUALIZADO: "Cuenta actualizada",
+    USUARIO_BLOQUEADO: "Cuenta desactivada",
+    USUARIO_DESBLOQUEADO: "Cuenta activada",
+    CURSO_CREADO: "Curso creado",
+    PUERTA_CREADA: "Puerta registrada",
+    RELACION_PADRE_ESTUDIANTE_CREADA: "Asignación creada",
+    CUIDADOR_CREADO: "Cuidador registrado",
+    AUTORIZACION_SOLICITADA: "Solicitud de cuidador",
+    CUIDADOR_AUTORIZACION_APROBADA: "Solicitud aprobada",
+    CUIDADOR_AUTORIZACION_REVOCADA: "Autorización revocada",
+    CUIDADOR_AUTORIZACION_RECHAZADA: "Solicitud rechazada",
+    INGRESO_EXITOSO: "Inicio de sesión",
+    CIERRE_SESION: "Cierre de sesión",
+    CAMBIO_CONTRASENA: "Cambio de contraseña",
+    RECUPERACION_CONTRASENA: "Recuperación de contraseña",
+    SOLICITUD_RECUPERACION: "Solicitud de recuperación",
+    INGRESO_RECHAZADO: "Inicio de sesión rechazado",
+    INGRESO_BLOQUEADO: "Cuenta bloqueada por seguridad",
+    INTENTO_TOTP_FALLIDO: "Código de seguridad inválido",
   };
   return (
     labels[value] ||
@@ -68,7 +91,7 @@ export function human(value) {
 export function badge(value) {
   const type = ["ACTIVO", "ACTIVA", "ACCESO_EMITIDO", "EXITO"].includes(value)
     ? "good"
-    : ["FALLO", "BLOQUEADA", "REVOCADO"].includes(value)
+    : ["FALLO", "BLOQUEADA", "REVOCADO", "RECHAZADO"].includes(value)
       ? "bad"
       : ["SOLICITADO", "PENDIENTE"].includes(value)
         ? "warn"

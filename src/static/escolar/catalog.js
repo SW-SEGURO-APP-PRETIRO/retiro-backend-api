@@ -162,7 +162,7 @@ export const catalog = {
     columns: [
       ["fecha", "Fecha y hora"],
       ["tipo", "Evento"],
-      ["actor_id", "Actor"],
+      ["actor_nombre", "Actor"],
       ["resultado", "Resultado"],
     ],
     noEdit: true,

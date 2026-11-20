@@ -11,6 +11,7 @@ from .serializers import (
     CrearCuidadorSerializer,
     CuidadorSerializer,
     FiltroAutorizacionesSerializer,
+    RechazarAutorizacionSerializer,
     SolicitarAutorizacionSerializer,
 )
 
@@ -112,7 +113,7 @@ class AutorizacionListView(APIView):
     @extend_schema(
         tags=TAG,
         summary="Listar solicitudes de autorización de la institución",
-        parameters=[OpenApiParameter("estado", str, description="SOLICITADO, ACCESO_EMITIDO, ACTIVO, EXPIRADO o REVOCADO")],
+        parameters=[OpenApiParameter("estado", str, description="SOLICITADO, ACCESO_EMITIDO, ACTIVO, EXPIRADO, REVOCADO o RECHAZADO")],
         request=None,
         responses=AutorizacionSerializer(many=True),
         operation_id="cuidadores_autorizaciones_list",
@@ -167,3 +168,37 @@ class RevocarAutorizacionView(_ResolverAutorizacionView):
     )
     def post(self, request, pk):
         return super().post(request, pk)
+
+
+class RechazarAutorizacionView(APIView):
+    permission_classes = [EsAdminEscolar]
+    serializer_class = RechazarAutorizacionSerializer
+
+    @extend_schema(
+        tags=TAG,
+        summary="Rechazar una solicitud de cuidador pendiente",
+        request=RechazarAutorizacionSerializer,
+        responses={200: AutorizacionSerializer},
+        operation_id="cuidadores_autorizacion_rechazar",
+    )
+    def post(self, request, pk):
+        serializer = RechazarAutorizacionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            autorizacion = services.rechazar_autorizacion(
+                request.user,
+                pk,
+                serializer.validated_data["motivo"],
+            )
+        except _ERRORES as exc:
+            return _traducir(exc)
+        contexto = {
+            "estudiantes": services.nombres_de_estudiantes(
+                request.user,
+                [autorizacion],
+            )
+        }
+        return ok(
+            AutorizacionSerializer(autorizacion, context=contexto).data,
+            "Solicitud rechazada.",
+        )

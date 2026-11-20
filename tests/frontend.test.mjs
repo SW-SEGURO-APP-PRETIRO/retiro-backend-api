@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { catalog } from "../src/static/escolar/catalog.js";
 import { escapeHTML, rows, api, ApiError } from "../src/static/escolar/api.js";
-import { formData } from "../src/static/escolar/ui.js";
+import { formData, human } from "../src/static/escolar/ui.js";
 
 test("un estudiante nuevo tiene estado válido sin selección adicional", () => {
   assert.equal(catalog.estudiantes.defaults.estado, "ACTIVO");
@@ -73,6 +73,10 @@ test("un error de validación conserva detalles y estado HTTP", async () => {
       error.status === 400 &&
       error.details.cedula[0] === "Inválida",
   );
+});
+test("el estado rechazado se presenta en lenguaje humano", () => {
+  assert.equal(human("RECHAZADO"), "Rechazado");
+  assert.equal(human("CUIDADOR_AUTORIZACION_RECHAZADA"), "Solicitud rechazada");
 });
 test("un login inválido muestra el error sin redirigir ni vaciar el formulario", async () => {
   let redirected = false;

@@ -90,7 +90,8 @@ function rowActions(row) {
     return (
       b("detail", "Ver detalle") +
       (row.estado === "SOLICITADO"
-        ? b("approve", "Emitir acceso")
+        ? b("approve", "Emitir acceso") +
+          b("reject", "Rechazar", "danger-text")
         : ["ACTIVO", "ACCESO_EMITIDO"].includes(row.estado)
           ? b("revoke", "Revocar", "danger-text")
           : "")
@@ -98,6 +99,13 @@ function rowActions(row) {
   if (page === "bitacora") return b("detail", "Ver evento");
   if (page === "notificaciones")
     return row.leida ? "" : b("read", "Marcar leída");
+  if (["padres", "guardias"].includes(page))
+    return (
+      b("edit", "Editar") +
+      (row.estado === "ACTIVA"
+        ? b("deactivate", "Desactivar", "danger-text")
+        : b("activate", "Activar"))
+    );
   return (
     (!config.noEdit ? b("edit", "Editar") : "") +
     (config.remove ? b("delete", "Eliminar", "danger-text") : "")
@@ -108,7 +116,7 @@ function toolbar() {
     return `<form class="filters" id="audit-filters"><label>Desde<input name="fecha_desde" type="date"></label><label>Hasta<input name="fecha_hasta" type="date"></label><label>Tipo de evento<input name="tipo" placeholder="Ej. ESTUDIANTE_CREADO"></label><label>Actor (ID)<input name="usuario" type="number" min="1"></label><button class="button" type="submit">Aplicar filtros</button></form>`;
   if (page === "notificaciones")
     return `<div class="tabs"><button data-filter="" aria-selected="${!state.status}">Todas</button><button data-filter="no_leidas" aria-selected="${!!state.status}">Sin leer</button></div>`;
-  return `<div class="list-toolbar"><label class="search">${icon("search")}<input type="search" id="search" placeholder="Buscar ${page === "cuidadores" ? "cuidador o estudiante" : "por nombre o cédula"}" aria-label="Buscar en ${page}" value="${e(state.search)}"></label><div class="filter-cluster">${["estudiantes", "padres", "guardias", "cuidadores"].includes(page) ? `<label class="sr-only" for="status-filter">Estado</label><select id="status-filter"><option value="">Todos los estados</option>${(page === "cuidadores" ? ["SOLICITADO", "ACCESO_EMITIDO", "ACTIVO", "REVOCADO", "EXPIRADO"] : page === "estudiantes" ? ["ACTIVO", "INACTIVO"] : ["ACTIVA", "PENDIENTE", "BLOQUEADA", "SUSPENDIDA"]).map((s) => `<option ${state.status === s ? "selected" : ""} value="${s}">${human(s)}</option>`).join("")}</select>` : ""}<span class="muted" id="result-count"></span></div></div>`;
+  return `<div class="list-toolbar"><label class="search">${icon("search")}<input type="search" id="search" placeholder="Buscar ${page === "cuidadores" ? "cuidador o estudiante" : "por nombre o cédula"}" aria-label="Buscar en ${page}" value="${e(state.search)}"></label><div class="filter-cluster">${["estudiantes", "padres", "guardias", "cuidadores"].includes(page) ? `<label class="sr-only" for="status-filter">Estado</label><select id="status-filter"><option value="">Todos los estados</option>${(page === "cuidadores" ? ["SOLICITADO", "ACCESO_EMITIDO", "ACTIVO", "REVOCADO", "EXPIRADO", "RECHAZADO"] : page === "estudiantes" ? ["ACTIVO", "INACTIVO"] : ["ACTIVA", "PENDIENTE", "BLOQUEADA", "SUSPENDIDA"]).map((s) => `<option ${state.status === s ? "selected" : ""} value="${s}">${human(s)}</option>`).join("")}</select>` : ""}<span class="muted" id="result-count"></span></div></div>`;
 }
 function renderList() {
   content.innerHTML = `${toolbar()}<div id="table-region"></div>`;
@@ -331,6 +339,19 @@ async function act(action, id) {
   const row = state.records.find((r) => r.id === Number(id));
   if (!row) return;
   if (action === "edit") return edit(row);
+  if (action === "activate" || action === "deactivate")
+    return confirm(
+      action === "activate" ? "Activar cuenta" : "Desactivar cuenta",
+      action === "activate"
+        ? `Se habilitará nuevamente el acceso de ${name(row)}.`
+        : `Se impedirá el acceso de ${name(row)} a esta institución.`,
+      () =>
+        api(
+          `cuentas/usuarios/${row.id}/${action === "activate" ? "desbloquear" : "bloquear"}/`,
+          { method: "POST" },
+        ),
+      action === "activate" ? "Activar" : "Desactivar",
+    );
   if (action === "delete")
     return confirm(
       `Eliminar ${config.singular}`,
@@ -354,6 +375,17 @@ async function act(action, id) {
         api(`cuidadores/autorizaciones/${row.id}/revocar/`, { method: "POST" }),
       "Revocar",
     );
+  if (action === "reject")
+    return confirm(
+      "Rechazar solicitud de cuidador",
+      `Se rechazará la solicitud de ${name(row.cuidador)} para ${row.estudiante_nombre || "el estudiante indicado"}. El padre solicitante recibirá una notificación.`,
+      () =>
+        api(`cuidadores/autorizaciones/${row.id}/rechazar/`, {
+          method: "POST",
+          body: {},
+        }),
+      "Rechazar",
+    );
   if (action === "read") {
     try {
       await api(`notificaciones/${row.id}/leida/`, { method: "PATCH" });
@@ -369,7 +401,7 @@ async function act(action, id) {
     if (page === "bitacora")
       showDetail(
         "Detalle del evento",
-        `<dl><dt>Evento</dt><dd>${e(human(row.tipo))}</dd><dt>Fecha</dt><dd>${e(date(row.fecha))}</dd><dt>Resultado</dt><dd>${badge(row.resultado)}</dd><dt>Actor</dt><dd>${e(row.actor_id ?? "—")}</dd><dt>Secuencia</dt><dd>${e(row.secuencia)}</dd></dl><h3>Datos del evento</h3><pre>${e(JSON.stringify(row.detalle, null, 2))}</pre><details><summary>Integridad del registro</summary><p>Hash propio</p><code>${e(row.hash_propio)}</code><p>Hash anterior</p><code>${e(row.hash_anterior)}</code></details>`,
+        `<dl><dt>Evento</dt><dd>${e(human(row.tipo))}</dd><dt>Fecha</dt><dd>${e(date(row.fecha))}</dd><dt>Resultado</dt><dd>${badge(row.resultado)}</dd><dt>Actor</dt><dd>${e(row.actor_nombre || "Sistema")}</dd><dt>Secuencia</dt><dd>${e(row.secuencia)}</dd><dt>Categoría</dt><dd>${e(human(row.categoria))}</dd></dl><h3>Datos del evento</h3><pre>${e(JSON.stringify(row.detalle, null, 2))}</pre><details><summary>Integridad del registro</summary><p>Hash propio</p><code>${e(row.hash_propio)}</code><p>Hash anterior</p><code>${e(row.hash_anterior)}</code></details>`,
       );
     else
       showDetail(

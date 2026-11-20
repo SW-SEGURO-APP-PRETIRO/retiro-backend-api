@@ -231,6 +231,49 @@ def revocar_autorizacion(actor, autorizacion_id):
     return autorizacion
 
 
+def rechazar_autorizacion(actor, autorizacion_id, motivo=""):
+    with transaction.atomic():
+        autorizacion = _autorizacion_de_institucion(actor, autorizacion_id)
+        if autorizacion.estado != AutorizacionCuidador.Estado.SOLICITADO:
+            raise ValueError("Solo se pueden rechazar solicitudes pendientes.")
+        autorizacion.estado = AutorizacionCuidador.Estado.RECHAZADO
+        autorizacion.rechazada_por_id = actor.pk
+        autorizacion.rechazada_en = timezone.now()
+        autorizacion.motivo_rechazo = motivo.strip()
+        autorizacion.save(
+            update_fields=[
+                "estado",
+                "rechazada_por_id",
+                "rechazada_en",
+                "motivo_rechazo",
+            ]
+        )
+        _registrar_auditoria(
+            actor,
+            "CUIDADOR_AUTORIZACION_RECHAZADA",
+            "EXITO",
+            {
+                "autorizacion_id": autorizacion.pk,
+                "cuidador_id": autorizacion.cuidador_id,
+                "estudiante_id": autorizacion.estudiante_id,
+                "motivo": autorizacion.motivo_rechazo,
+            },
+            categoria=OPERATIVA,
+        )
+        cuidador = Cuidador._base_manager.get(pk=autorizacion.cuidador_id)
+        crear_y_emitir_notificacion(
+            destinatario_ids=autorizacion.solicitada_por_id,
+            institucion_id=actor.institucion_id,
+            emisor_id=actor.pk,
+            tipo="ACCESO_RECHAZADO",
+            titulo="Solicitud de cuidador rechazada",
+            mensaje=f"No se aprobó la solicitud para {cuidador.nombres} {cuidador.apellidos}.",
+            referencia=autorizacion.pk,
+            subevento="cuidador.rechazado",
+        )
+    return autorizacion
+
+
 # --------------------------------------------------------------------------------- Auxiliares
 def _mensaje(exc):
     if isinstance(exc, ValidationError):

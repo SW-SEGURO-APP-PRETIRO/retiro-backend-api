@@ -110,15 +110,24 @@ class UsuarioDetailView(APIView):
 
 
 class CambiarEstadoUsuarioView(APIView):
-    permission_classes = [EsAdminSistema]
+    permission_classes = [EsAdminSistemaOEscolar]
     serializer_class = UsuarioSerializer
 
     @extend_schema(tags=["Cuentas"], request=None, operation_id="cuentas_usuario_estado")
     def post(self, request, pk, estado):
         try:
-            usuario = Usuario._base_manager.get(pk=pk)
+            if request.user.rol == Rol.ADMIN_SISTEMA:
+                usuario = Usuario._base_manager.get(pk=pk)
+            else:
+                usuario = Usuario.objects.de_institucion(request.user.institucion_id).get(pk=pk)
         except Usuario.DoesNotExist:
             return error("NO_ENCONTRADO", "El usuario no existe.", http_status=404)
+        if request.user.rol == Rol.ADMIN_ESCOLAR and usuario.rol not in (Rol.PADRE, Rol.GUARDIA):
+            return error(
+                "PERMISO_DENEGADO",
+                "El administrador escolar solo puede gestionar representantes y guardias.",
+                http_status=403,
+            )
         if estado == "bloquear":
             nuevo_estado = Usuario.Estado.BLOQUEADA
         elif estado == "desbloquear":

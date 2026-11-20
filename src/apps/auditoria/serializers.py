@@ -2,6 +2,8 @@ import json
 
 from rest_framework import serializers
 
+from apps.cuentas.models import Usuario
+
 from .models import EventoAuditoria
 
 
@@ -9,6 +11,7 @@ class EventoAuditoriaSerializer(serializers.ModelSerializer):
     """Solo lectura (FAU_STG.1): la bitácora no se modifica por la API."""
 
     detalle = serializers.SerializerMethodField()
+    actor_nombre = serializers.SerializerMethodField()
 
     class Meta:
         model = EventoAuditoria
@@ -19,6 +22,7 @@ class EventoAuditoriaSerializer(serializers.ModelSerializer):
             "categoria",
             "tipo",
             "actor_id",
+            "actor_nombre",
             "resultado",
             "detalle",
             "fecha",
@@ -32,6 +36,15 @@ class EventoAuditoriaSerializer(serializers.ModelSerializer):
             return json.loads(obj.detalle)
         except (TypeError, ValueError):
             return {}
+
+    def get_actor_nombre(self, obj) -> str:
+        if not obj.actor_id:
+            return "Sistema"
+        actor = Usuario._base_manager.filter(pk=obj.actor_id).first()
+        if not actor:
+            return "Usuario eliminado"
+        nombre = f"{actor.nombres} {actor.apellidos}".strip()
+        return nombre or actor.correo
 
 
 class FiltroAuditoriaSerializer(serializers.Serializer):

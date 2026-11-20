@@ -97,3 +97,86 @@ def test_html_escapa_nombre_de_usuario(client, admin):
     response = client.get("/escolar/")
     assert b'<script>alert(' not in response.content
     assert b'&lt;script&gt;' in response.content
+
+
+@pytest.mark.django_db
+def test_admin_escolar_puede_activar_y_desactivar_padres(client, admin, colegio):
+    padre = Usuario.objects.create(
+        correo="padre.estado@example.test",
+        cedula="1711000017",
+        nombres="Laura",
+        apellidos="Estado",
+        rol="PADRE",
+        institucion_id=colegio.pk,
+        estado="ACTIVA",
+    )
+    client.force_login(admin)
+
+    bloquear = client.post(f"/api/v1/cuentas/usuarios/{padre.pk}/bloquear/")
+    assert bloquear.status_code == 200
+    padre.refresh_from_db()
+    assert padre.estado == "BLOQUEADA"
+
+    activar = client.post(f"/api/v1/cuentas/usuarios/{padre.pk}/desbloquear/")
+    assert activar.status_code == 200
+    padre.refresh_from_db()
+    assert padre.estado == "ACTIVA"
+
+
+@pytest.mark.django_db
+def test_admin_escolar_puede_rechazar_solicitud_pendiente(client, admin, colegio):
+    from apps.cuentas.models import Estudiante, Rol
+    from apps.cuidadores.models import AutorizacionCuidador, Cuidador
+    from apps.instituciones.models import Curso
+    from shared.tenancy.context import contexto_institucion
+
+    padre = Usuario.objects.create(
+        correo="padre.rechazo@example.test",
+        cedula="1711000018",
+        nombres="Carlos",
+        apellidos="Rechazo",
+        rol=Rol.PADRE,
+        institucion_id=colegio.pk,
+        estado="ACTIVA",
+    )
+    with contexto_institucion(colegio.pk):
+        curso = Curso.objects.create(
+            institucion_id=colegio.pk,
+            nombre="5to A",
+            hora_salida="13:30",
+        )
+        estudiante = Estudiante.objects.create(
+            institucion_id=colegio.pk,
+            cedula="1711000019",
+            nombres="Ana",
+            apellidos="Estudiante",
+            fecha_nacimiento="2016-04-12",
+            curso_id=curso.pk,
+        )
+        cuidador = Cuidador.objects.create(
+            institucion_id=colegio.pk,
+            tipo=Cuidador.Tipo.FIJO,
+            cedula="1711000020",
+            nombres="Lucía",
+            apellidos="Mendoza",
+            correo="lucia.rechazo@example.test",
+        )
+        autorizacion = AutorizacionCuidador.objects.create(
+            institucion_id=colegio.pk,
+            cuidador=cuidador,
+            estudiante_id=estudiante.pk,
+            solicitada_por_id=padre.pk,
+            estado=AutorizacionCuidador.Estado.SOLICITADO,
+        )
+
+    client.force_login(admin)
+    response = client.post(
+        f"/api/v1/cuidadores/autorizaciones/{autorizacion.pk}/rechazar/",
+        {"motivo": "La identidad no coincide con el registro."},
+        content_type="application/json",
+    )
+    assert response.status_code == 200, response.content
+    autorizacion.refresh_from_db()
+    assert autorizacion.estado == "RECHAZADO"
+    assert autorizacion.rechazada_por_id == admin.pk
+    assert autorizacion.motivo_rechazo == "La identidad no coincide con el registro."

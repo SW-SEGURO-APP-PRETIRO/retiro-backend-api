@@ -122,7 +122,7 @@ def crear_relacion(actor, datos):
     return relacion
 
 
-def cambiar_estado_usuario(admin_sistema, usuario, estado):
+def cambiar_estado_usuario(actor, usuario, estado):
     usuario.estado = estado
     if estado == Usuario.Estado.ACTIVA:
         usuario.intentos_fallidos = 0
@@ -131,10 +131,11 @@ def cambiar_estado_usuario(admin_sistema, usuario, estado):
     else:
         usuario.save(update_fields=["estado"])
     _registrar_auditoria(
-        admin_sistema,
+        actor,
         "USUARIO_BLOQUEADO" if estado == Usuario.Estado.BLOQUEADA else "USUARIO_DESBLOQUEADO",
         "EXITO",
         {"usuario_id": usuario.pk},
+        categoria=EventoAuditoria.Categoria.OPERATIVA,
     )
     return usuario
 

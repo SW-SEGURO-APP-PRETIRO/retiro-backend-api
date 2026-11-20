@@ -50,6 +50,7 @@ class AutorizacionCuidador(TenantModel):
         ACTIVO = "ACTIVO", "Activo (primer ingreso hecho)"
         EXPIRADO = "EXPIRADO", "Expirado"
         REVOCADO = "REVOCADO", "Revocado"
+        RECHAZADO = "RECHAZADO", "Rechazado por el administrador escolar"
 
     cuidador = models.ForeignKey(Cuidador, on_delete=models.PROTECT, related_name="autorizaciones")
     estudiante_id = models.PositiveBigIntegerField()  # cuentas.Estudiante (por id)
@@ -59,6 +60,9 @@ class AutorizacionCuidador(TenantModel):
     acceso_emitido_por_id = models.PositiveBigIntegerField(null=True, blank=True)
     acceso_emitido_en = models.DateTimeField(null=True, blank=True)
     revocada_en = models.DateTimeField(null=True, blank=True)
+    rechazada_por_id = models.PositiveBigIntegerField(null=True, blank=True)
+    rechazada_en = models.DateTimeField(null=True, blank=True)
+    motivo_rechazo = models.CharField(max_length=255, blank=True)
     firma_hmac = models.CharField(max_length=64, blank=True)
 
     class Meta:

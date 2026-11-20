@@ -45,7 +45,11 @@ def _ruc(base9: str) -> str:
 def sembrar(clave: str | None = None) -> dict:
     from django.utils import timezone
 
+    from apps.auditoria.models import EventoAuditoria
+    from apps.autenticacion.services import _registrar_auditoria
+    from apps.chat.models import Notificacion
     from apps.cuentas.models import Estudiante, RelacionPadreEstudiante, Rol, Usuario
+    from apps.cuidadores.models import AutorizacionCuidador, Cuidador
     from apps.instituciones.models import Curso, Institucion, Puerta
     from shared.tenancy.context import sin_filtro
 
@@ -64,6 +68,15 @@ def sembrar(clave: str | None = None) -> dict:
             )
         resumen[correo] = rol
         return u
+
+    def registrar(actor, tipo, detalle):
+        _registrar_auditoria(
+            actor,
+            tipo,
+            "EXITO",
+            detalle,
+            categoria=EventoAuditoria.Categoria.OPERATIVA,
+        )
 
     with sin_filtro():  # proceso interno: la semilla escribe en varias instituciones
         usuario("admin.sistema@retiroseguro.test", Rol.ADMIN_SISTEMA, None, 1, "Admin", "Sistema")
@@ -124,34 +137,161 @@ def sembrar(clave: str | None = None) -> dict:
                     estado=Institucion.Estado.ACTIVA, aprobada_en=timezone.now(),
                 ),
             )
-            puerta, _ = Puerta.objects.get_or_create(institucion_id=inst.id, nombre="Puerta principal")
-            cursos = [
-                Curso.objects.get_or_create(institucion_id=inst.id, nombre=n, defaults={"hora_salida": h})[0]
-                for n, h in datos["cursos"]
-            ]
+            puerta, puerta_creada = Puerta.objects.get_or_create(institucion_id=inst.id, nombre="Puerta principal")
+            cursos = []
 
             admin_correo, admin_nombres, admin_apellidos = datos["admin"]
-            usuario(admin_correo, Rol.ADMIN_ESCOLAR, inst, 1, admin_nombres, admin_apellidos)
+            admin = usuario(admin_correo, Rol.ADMIN_ESCOLAR, inst, 1, admin_nombres, admin_apellidos)
+            for nombre_curso, hora_salida in datos["cursos"]:
+                curso, curso_creado = Curso.objects.get_or_create(
+                    institucion_id=inst.id,
+                    nombre=nombre_curso,
+                    defaults={"hora_salida": hora_salida},
+                )
+                cursos.append(curso)
+                if curso_creado:
+                    registrar(
+                        admin,
+                        "CURSO_CREADO",
+                        {"curso_id": curso.pk, "nombre": curso.nombre},
+                    )
             padre_correo, padre_nombres, padre_apellidos = datos["padre"]
             padre = usuario(padre_correo, Rol.PADRE, inst, 2, padre_nombres, padre_apellidos)
             guardia_correo, guardia_nombres, guardia_apellidos = datos["guardia"]
-            usuario(guardia_correo, Rol.GUARDIA, inst, 3, guardia_nombres, guardia_apellidos,
-                    telefono="0991234567", puerta_id=puerta.id)
+            guardia = usuario(
+                guardia_correo,
+                Rol.GUARDIA,
+                inst,
+                3,
+                guardia_nombres,
+                guardia_apellidos,
+                telefono="0991234567",
+                puerta_id=puerta.id,
+            )
             cuidador_correo, cuidador_nombres, cuidador_apellidos = datos["cuidador"]
-            usuario(cuidador_correo, Rol.CUIDADOR_FIJO, inst, 4, cuidador_nombres, cuidador_apellidos,
-                    telefono="0987654321")
+            cuidador_usuario = usuario(
+                cuidador_correo,
+                Rol.CUIDADOR_FIJO,
+                inst,
+                4,
+                cuidador_nombres,
+                cuidador_apellidos,
+                telefono="0987654321",
+            )
+
+            if puerta_creada:
+                registrar(admin, "PUERTA_CREADA", {"puerta_id": puerta.pk, "nombre": puerta.nombre})
+
+            cuidador = Cuidador._base_manager.filter(
+                institucion_id=inst.id,
+                cedula=_cedula(f"17{inst.id}20{inst.id:02d}00"),
+            ).first()
+            if cuidador is None:
+                cuidador = Cuidador.objects.create(
+                    institucion_id=inst.id,
+                    tipo=Cuidador.Tipo.FIJO,
+                    usuario_id=cuidador_usuario.pk,
+                    cedula=_cedula(f"17{inst.id}20{inst.id:02d}00"),
+                    nombres=cuidador_nombres,
+                    apellidos=cuidador_apellidos,
+                    telefono="0987654321",
+                    correo=cuidador_correo,
+                )
+                registrar(
+                    admin,
+                    "CUIDADOR_CREADO",
+                    {"cuidador_id": cuidador.pk, "tipo": cuidador.tipo},
+                )
 
             for k, ((nombres, apellidos, fecha_nacimiento), curso) in enumerate(
                 zip(datos["estudiantes"], cursos),
                 start=1,
             ):
-                est, _ = Estudiante.objects.get_or_create(
+                est, estudiante_creado = Estudiante.objects.get_or_create(
                     institucion_id=inst.id, cedula=_cedula(f"17{inst.id}10{k:04d}"),
                     defaults=dict(nombres=nombres, apellidos=apellidos, curso_id=curso.id,
                                   fecha_nacimiento=fecha_nacimiento),
                 )
-                RelacionPadreEstudiante.objects.get_or_create(
+                relacion, relacion_creada = RelacionPadreEstudiante.objects.get_or_create(
                     institucion_id=inst.id, padre=padre, estudiante=est)
+                if estudiante_creado:
+                    registrar(
+                        admin,
+                        "ESTUDIANTE_CREADO",
+                        {
+                            "estudiante_id": est.pk,
+                            "curso": curso.nombre,
+                        },
+                    )
+                if relacion_creada:
+                    registrar(
+                        admin,
+                        "RELACION_PADRE_ESTUDIANTE_CREADA",
+                        {
+                            "relacion_id": relacion.pk,
+                            "padre_id": padre.pk,
+                            "estudiante_id": est.pk,
+                        },
+                    )
+
+            primer_estudiante = Estudiante.objects.filter(institucion_id=inst.id).order_by("id").first()
+            if primer_estudiante:
+                autorizacion, creada = AutorizacionCuidador.objects.get_or_create(
+                    institucion_id=inst.id,
+                    cuidador=cuidador,
+                    estudiante_id=primer_estudiante.pk,
+                    defaults={
+                        "solicitada_por_id": padre.pk,
+                        "estado": (
+                            AutorizacionCuidador.Estado.SOLICITADO
+                            if i == 1
+                            else AutorizacionCuidador.Estado.RECHAZADO
+                        ),
+                        "motivo_rechazo": (
+                            ""
+                            if i == 1
+                            else "La autorización no corresponde a la persona registrada por la familia."
+                        ),
+                        "rechazada_por_id": admin.pk if i != 1 else None,
+                        "rechazada_en": timezone.now() if i != 1 else None,
+                    },
+                )
+                if creada:
+                    registrar(
+                        padre,
+                        "AUTORIZACION_SOLICITADA",
+                        {
+                            "autorizacion_id": autorizacion.pk,
+                            "cuidador_id": cuidador.pk,
+                            "estudiante_id": primer_estudiante.pk,
+                        },
+                    )
+                    if i != 1:
+                        registrar(
+                            admin,
+                            "CUIDADOR_AUTORIZACION_RECHAZADA",
+                            {
+                                "autorizacion_id": autorizacion.pk,
+                                "cuidador_id": cuidador.pk,
+                                "estudiante_id": primer_estudiante.pk,
+                                "motivo": autorizacion.motivo_rechazo,
+                            },
+                        )
+
+                Notificacion.objects.get_or_create(
+                    institucion_id=inst.id,
+                    destinatario_id=admin.pk,
+                    tipo="CUIDADOR_SOLICITADO" if i == 1 else "ACCESO_RECHAZADO",
+                    titulo="Nueva solicitud de cuidador" if i == 1 else "Solicitud de cuidador rechazada",
+                    defaults={
+                        "mensaje": (
+                            "Hay una solicitud pendiente de revisión."
+                            if i == 1
+                            else "Se registró el rechazo de una solicitud."
+                        ),
+                        "referencia": str(autorizacion.pk),
+                    },
+                )
     return resumen
 
 
