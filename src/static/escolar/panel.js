@@ -39,6 +39,7 @@ const state = {
   activeRoomId: null,
 };
 const isPadre = () => state.user?.rol === "PADRE";
+const isAdminEscolar = () => state.user?.rol === "ADMIN_ESCOLAR";
 let loadVersion = 0;
 icons();
 const find = (source, id) =>
@@ -70,7 +71,10 @@ function cell(row, key) {
     case "solicitante":
       if (isPadre() && String(row.solicitada_por_id) === String(state.user?.id))
         return e(name(state.user));
-      return e(name(find("padres", row.solicitada_por_id)));
+      return e(
+        name(find("padres", row.solicitada_por_id)) ||
+          (row.solicitada_por_id ? `Representante #${row.solicitada_por_id}` : "—"),
+      );
     case "cuidador":
       return person(row.cuidador, human(row.cuidador.tipo));
     case "vigente":
@@ -98,7 +102,7 @@ function cell(row, key) {
 function rowActions(row) {
   const b = (action, label, extra = "") =>
     `<button class="text-button ${extra}" data-action="${action}" data-id="${row.id}">${label}</button>`;
-  if (isPadre()) {
+  if (!isAdminEscolar()) {
     if (page === "cuidadores") return b("detail", "Ver detalle");
     if (page === "notificaciones")
       return row.leida ? "" : b("read", "Marcar leída");
@@ -239,7 +243,7 @@ async function sources() {
     estudiantes: "cuentas/estudiantes/",
     padres: "cuentas/usuarios/?rol=PADRE",
   };
-  const needed = isPadre()
+  const needed = !isAdminEscolar()
     ? {
         inicio: ["cursos", "estudiantes"],
         estudiantes: ["cursos"],
@@ -839,7 +843,13 @@ async function start() {
   try {
     const profile = await api("autenticacion/perfil/");
     const rol = profile.datos.usuario.rol;
-    if (!["ADMIN_ESCOLAR", "PADRE"].includes(rol))
+    if (rol === "ADMIN_SISTEMA") {
+      location.assign("/sistema/");
+      return;
+    }
+    if (
+      !["ADMIN_ESCOLAR", "PADRE", "GUARDIA", "CUIDADOR_FIJO"].includes(rol)
+    )
       throw new Error("Esta cuenta no pertenece al portal escolar.");
     if (profile.datos.requiere_cambio_contrasena) {
       location.assign("/autenticacion/cambiar-contrasena/");
@@ -851,19 +861,21 @@ async function start() {
       state.institution.nombre;
     await sources();
     if (page === "inicio") {
-      if (isPadre()) {
-        actions.innerHTML = `<a href="/escolar/cuidadores/" class="button primary">${icon("plus")} Solicitar cuidador</a>`;
-        await parentOverview();
-      } else {
+      if (isAdminEscolar()) {
         actions.innerHTML = `<a href="/escolar/estudiantes/" class="button primary">${icon("plus")} Gestionar estudiantes</a>`;
         await overview();
+      } else {
+        actions.innerHTML = isPadre()
+          ? `<a href="/escolar/cuidadores/" class="button primary">${icon("plus")} Solicitar cuidador</a>`
+          : `<a href="/escolar/chat/" class="button primary">${icon("chat")} Abrir sala general</a>`;
+        await parentOverview();
       }
     } else if (page === "chat") {
       actions.innerHTML = `<button class="button" id="refresh-chat">${icon("refresh")} Actualizar</button>`;
       document.querySelector("#refresh-chat").onclick = () => loadChat();
       await loadChat();
     } else if (page === "institucion") {
-      if (isPadre()) {
+      if (!isAdminEscolar()) {
         actions.innerHTML = `<a href="/escolar/chat/" class="button primary">${icon("chat")} Contactar al colegio</a>`;
       } else {
         actions.innerHTML =
@@ -873,7 +885,7 @@ async function start() {
       }
       renderInstitution();
     } else {
-      const canCreate = !isPadre() && config.create;
+      const canCreate = isAdminEscolar() && config.create;
       const padreCaregiverCreate = isPadre() && page === "cuidadores";
       actions.innerHTML = `<button class="button" id="refresh" aria-label="Actualizar listado">${icon("refresh")} Actualizar</button>${canCreate ? `<button class="button primary" id="create">${icon("plus")} ${config.create}</button>` : ""}${padreCaregiverCreate ? `<button class="button primary" id="request-caregiver">${icon("plus")} Solicitar cuidador</button>` : ""}${page === "notificaciones" ? '<button class="button primary" id="read-all">Marcar todas leídas</button>' : ""}`;
       document

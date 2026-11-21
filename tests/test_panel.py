@@ -33,10 +33,36 @@ def test_pantallas_escolares(client, admin, pantalla):
     assert "no-store" in response.headers["Cache-Control"]
 
 @pytest.mark.django_db
-def test_otro_rol_no_autorizado_no_ve_panel(client, admin):
-    Usuario.objects.filter(pk=admin.pk).update(rol="GUARDIA")
-    client.force_login(Usuario.objects.get(pk=admin.pk))
-    assert client.get("/escolar/").status_code == 403
+def test_guardia_y_cuidador_fijo_ven_sus_pantallas_y_no_las_exclusivas_de_admin(client, colegio):
+    guardia = Usuario.objects.create(
+        correo="guardia.portal@example.test",
+        cedula="1700000011",
+        nombres="Jorge",
+        apellidos="Guardia",
+        rol="GUARDIA",
+        institucion_id=colegio.pk,
+        estado="ACTIVA",
+    )
+    cuidador = Usuario.objects.create(
+        correo="cuidador.portal@example.test",
+        cedula="1700000012",
+        nombres="Ricardo",
+        apellidos="Cuidador",
+        rol="CUIDADOR_FIJO",
+        institucion_id=colegio.pk,
+        estado="ACTIVA",
+    )
+    client.force_login(guardia)
+    for permitida in ["", "estudiantes/", "cuidadores/", "cursos/", "puertas/", "chat/", "notificaciones/", "institucion/"]:
+        assert client.get("/escolar/" + permitida).status_code == 200
+    for denegada in ["padres/", "guardias/", "asignaciones/", "bitacora/"]:
+        assert client.get("/escolar/" + denegada).status_code == 403
+
+    client.force_login(cuidador)
+    for permitida in ["", "estudiantes/", "cuidadores/", "chat/", "notificaciones/", "institucion/"]:
+        assert client.get("/escolar/" + permitida).status_code == 200
+    for denegada in ["padres/", "guardias/", "asignaciones/", "cursos/", "puertas/", "bitacora/"]:
+        assert client.get("/escolar/" + denegada).status_code == 403
 
 
 @pytest.mark.django_db
@@ -242,25 +268,32 @@ def test_pantallas_admin_sistema(client, admin_sistema, pantalla):
     "modo",
     ["ingresar/", "recuperar/", "restablecer/"],
 )
-def test_login_publico_admin_sistema_emite_csrf(client, modo):
+def test_rutas_antiguas_auth_sistema_redirigen_a_login_unico(client, modo):
     response = client.get("/sistema/autenticacion/" + modo)
-    assert response.status_code == 200
-    assert "csrftoken" in response.cookies
-    assert b"Administraci\xc3\xb3n del sistema" in response.content
+    assert response.status_code == 302
+    assert response.url == "/autenticacion/" + modo
 
 
 def test_anonimo_no_ve_panel_sistema(client):
     response = client.get("/sistema/")
     assert response.status_code == 302
-    assert "/sistema/autenticacion/ingresar/" in response.url
+    assert "/autenticacion/ingresar/" in response.url
 
 
 @pytest.mark.django_db
-def test_clave_temporal_admin_sistema_redirige_a_su_propio_cambio(client, admin_sistema):
+def test_clave_temporal_admin_sistema_redirige_a_cambio_unico(client, admin_sistema):
     admin_sistema.contrasena_temporal = True
     admin_sistema.save()
     client.force_login(admin_sistema)
-    assert client.get("/sistema/").url == "/sistema/autenticacion/cambiar-contrasena/"
+    assert client.get("/sistema/").url == "/autenticacion/cambiar-contrasena/"
+
+
+@pytest.mark.django_db
+def test_raiz_redirige_segun_rol(client, admin, admin_sistema):
+    client.force_login(admin_sistema)
+    assert client.get("/").url == "/sistema/"
+    client.force_login(admin)
+    assert client.get("/").status_code == 200
 
 
 @pytest.mark.django_db
@@ -269,7 +302,6 @@ def test_admin_escolar_no_ve_panel_sistema_y_viceversa(client, admin, admin_sist
     assert client.get("/sistema/").status_code == 403
     client.force_login(admin_sistema)
     assert client.get("/escolar/").status_code == 403
-    assert client.get("/").status_code == 403
 
 
 

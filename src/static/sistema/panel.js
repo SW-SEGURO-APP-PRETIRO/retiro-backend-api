@@ -1066,7 +1066,7 @@ document.addEventListener("keydown", (ev) => {
 document.querySelector("#logout").onclick = async () => {
   try {
     await api("autenticacion/cerrar-sesion/", { method: "POST" });
-    location.assign("/sistema/autenticacion/ingresar/");
+    location.assign("/autenticacion/ingresar/");
   } catch (error) {
     showError(error);
   }
@@ -1147,7 +1147,7 @@ async function start() {
     if (profile.datos.usuario.rol !== "ADMIN_SISTEMA")
       throw new Error("Esta cuenta no pertenece a la administración del sistema.");
     if (profile.datos.requiere_cambio_contrasena) {
-      location.assign("/sistema/autenticacion/cambiar-contrasena/");
+      location.assign("/autenticacion/cambiar-contrasena/");
       return;
     }
     state.currentUser = profile.datos.usuario;

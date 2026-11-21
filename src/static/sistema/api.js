@@ -59,7 +59,7 @@ export async function api(path, { method = "GET", body, signal } = {}) {
         (response.status === 403 &&
           payload.error?.codigo === "NOT_AUTHENTICATED"))
     ) {
-      location.assign("/sistema/autenticacion/ingresar/");
+      location.assign("/autenticacion/ingresar/");
     }
     throw error;
   }

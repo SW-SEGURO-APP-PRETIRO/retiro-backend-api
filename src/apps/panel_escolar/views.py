@@ -5,7 +5,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 from apps.cuentas.models import Rol
-from shared.permissions import EsPadreOAdminEscolar
+from shared.permissions import EsMiembroInstitucion
 
 ADMIN_PAGES = [
     ("inicio", "Resumen", "home", "Tu institución, al día."),
@@ -26,12 +26,50 @@ PADRE_PAGES = [
     ("inicio", "Resumen familiar", "home", "Tus hijos, cuidadores y avisos del colegio."),
     ("estudiantes", "Mis hijos", "students", "Estudiantes vinculados oficialmente a tu cuenta."),
     ("cuidadores", "Mis cuidadores", "check", "Registra cuidadores y solicita autorización de retiro para tus hijos."),
-    ("chat", "Chat con el colegio", "chat", "Sala general de la institución y comunicación directa con administración."),
+    ("chat", "Chat con el colegio", "chat", "Sala general de la institución."),
     ("notificaciones", "Notificaciones", "bell", "Avisos de aprobaciones, rechazos y novedades de retiro."),
     ("institucion", "Mi institución", "school", "Información de contacto del colegio de tus hijos."),
 ]
 
+GUARDIA_PAGES = [
+    ("inicio", "Control de puerta", "home", "Supervisión de salidas, puertas y cuidadores autorizados."),
+    ("estudiantes", "Estudiantes", "students", "Consulta de matrícula, cursos y horarios de salida."),
+    ("cuidadores", "Cuidadores autorizados", "check", "Verifica las personas autorizadas para retirar estudiantes."),
+    ("cursos", "Cursos y horarios", "calendar", "Horarios oficiales de salida por curso."),
+    ("puertas", "Puertas", "door", "Puntos de salida habilitados en la institución."),
+    ("chat", "Chat institucional", "chat", "Sala general de coordinación con la institución."),
+    ("notificaciones", "Notificaciones", "bell", "Avisos operativos en tiempo real."),
+    ("institucion", "Mi institución", "school", "Información del colegio."),
+]
+
+CUIDADOR_PAGES = [
+    ("inicio", "Resumen de retiro", "home", "Estudiantes autorizados a tu cargo y horarios de salida."),
+    ("estudiantes", "Estudiantes asignados", "students", "Estudiantes que estás autorizado a retirar."),
+    ("cuidadores", "Mis autorizaciones", "check", "Estado de tus autorizaciones de retiro."),
+    ("chat", "Chat institucional", "chat", "Sala general de la institución."),
+    ("notificaciones", "Notificaciones", "bell", "Avisos sobre tus autorizaciones y retiros."),
+    ("institucion", "Mi institución", "school", "Información de contacto del colegio."),
+]
+
+PAGES_BY_ROLE = {
+    Rol.ADMIN_ESCOLAR: ADMIN_PAGES,
+    Rol.PADRE: PADRE_PAGES,
+    Rol.GUARDIA: GUARDIA_PAGES,
+    Rol.CUIDADOR_FIJO: CUIDADOR_PAGES,
+}
+
 PAGES = ADMIN_PAGES
+
+
+@never_cache
+@ensure_csrf_cookie
+@require_GET
+def root_panel(request):
+    if not request.user.is_authenticated:
+        return redirect("/autenticacion/ingresar/")
+    if getattr(request.user, "rol", None) == Rol.ADMIN_SISTEMA:
+        return redirect("/sistema/")
+    return panel(request, page="inicio")
 
 
 @never_cache
@@ -40,14 +78,13 @@ PAGES = ADMIN_PAGES
 def panel(request, page="inicio"):
     if not request.user.is_authenticated:
         return redirect("/autenticacion/ingresar/")
-    if not EsPadreOAdminEscolar().has_permission(request, None):
+    if not EsMiembroInstitucion().has_permission(request, None):
         return render(request, "escolar/denegado.html", status=403)
     if request.user.contrasena_temporal:
         return redirect("/autenticacion/cambiar-contrasena/")
-    nav = PADRE_PAGES if request.user.rol == Rol.PADRE else ADMIN_PAGES
+    nav = PAGES_BY_ROLE.get(request.user.rol, PADRE_PAGES)
     item = next((p for p in nav if p[0] == page), None)
     if item is None:
-        # Si un PADRE intenta entrar a una página exclusiva de ADMIN_ESCOLAR (ej. /escolar/padres/), responde 403
         if any(p[0] == page for p in ADMIN_PAGES):
             return render(request, "escolar/denegado.html", status=403)
         return render(request, "escolar/denegado.html", status=404)

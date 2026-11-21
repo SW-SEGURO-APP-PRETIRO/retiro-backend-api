@@ -3,7 +3,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from shared.permissions import EsAdminEscolar, EsPadreOAdminEscolar
+from shared.permissions import EsAdminEscolar, EsMiembroInstitucion, EsPadreOAdminEscolar
 
 from . import services
 from .serializers import (
@@ -101,7 +101,7 @@ class SolicitarAutorizacionView(APIView):
 
 
 class AutorizacionListView(APIView):
-    permission_classes = [EsPadreOAdminEscolar]
+    permission_classes = [EsMiembroInstitucion]
     serializer_class = AutorizacionSerializer
 
     @extend_schema(

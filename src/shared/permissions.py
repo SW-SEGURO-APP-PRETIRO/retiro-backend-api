@@ -46,6 +46,19 @@ class EsPadreOAdminEscolar(BasePermission):
         return False
 
 
+class EsMiembroInstitucion(BasePermission):
+    """Cualquier usuario perteneciente a una institución activa (ADMIN_ESCOLAR, PADRE, GUARDIA o CUIDADOR_FIJO)."""
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated or not user.institucion_id:
+            return False
+        if user.rol not in (Rol.ADMIN_ESCOLAR, Rol.PADRE, Rol.GUARDIA, Rol.CUIDADOR_FIJO):
+            return False
+        return Institucion.objects.filter(pk=user.institucion_id, estado=Institucion.Estado.ACTIVA).exists()
+
+
+
 class PerteneceAMismaInstitucion(BasePermission):
     def has_object_permission(self, request, view, obj):
         user = request.user

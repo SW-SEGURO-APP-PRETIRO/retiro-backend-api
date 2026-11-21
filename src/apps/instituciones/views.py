@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.cuentas.models import Rol
-from shared.permissions import EsAdminEscolar, EsAdminSistema, EsPadreOAdminEscolar
+from shared.permissions import EsAdminEscolar, EsAdminSistema, EsMiembroInstitucion
 
 from .models import Curso, Institucion, Puerta
 from .serializers import (
@@ -158,13 +158,13 @@ class CambiarEstadoInstitucionView(APIView):
 
 
 class MiInstitucionView(APIView):
-    permission_classes = [EsPadreOAdminEscolar]
+    permission_classes = [EsMiembroInstitucion]
     serializer_class = InstitucionSerializer
 
     def get_permissions(self):
         if self.request.method == "PATCH":
             return [EsAdminEscolar()]
-        return [EsPadreOAdminEscolar()]
+        return [EsMiembroInstitucion()]
 
     @extend_schema(tags=["Instituciones"], request=None, responses=InstitucionSerializer)
     def get(self, request):
@@ -183,13 +183,13 @@ class MiInstitucionView(APIView):
 
 
 class CursoListCreateView(APIView):
-    permission_classes = [EsPadreOAdminEscolar]
+    permission_classes = [EsMiembroInstitucion]
     serializer_class = CursoSerializer
 
     def get_permissions(self):
         if self.request.method == "POST":
             return [EsAdminEscolar()]
-        return [EsPadreOAdminEscolar()]
+        return [EsMiembroInstitucion()]
 
     @extend_schema(tags=["Instituciones"], request=None, responses=CursoSerializer(many=True))
     def get(self, request):
@@ -246,13 +246,13 @@ class CursoDetailView(APIView):
 
 
 class PuertaListCreateView(APIView):
-    permission_classes = [EsPadreOAdminEscolar]
+    permission_classes = [EsMiembroInstitucion]
     serializer_class = PuertaSerializer
 
     def get_permissions(self):
         if self.request.method == "POST":
             return [EsAdminEscolar()]
-        return [EsPadreOAdminEscolar()]
+        return [EsMiembroInstitucion()]
 
     @extend_schema(tags=["Instituciones"], request=None, responses=PuertaSerializer(many=True))
     def get(self, request):

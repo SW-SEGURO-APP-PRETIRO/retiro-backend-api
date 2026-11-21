@@ -47,6 +47,8 @@ def listar_cuidadores(actor):
             estudiante_id__in=hijos_ids,
         ).values_list("cuidador_id", flat=True)
         qs = qs.filter(pk__in=cuidadores_ids)
+    elif actor.rol == Rol.CUIDADOR_FIJO:
+        qs = qs.filter(usuario_id=actor.pk)
     return qs.order_by("id")
 
 
@@ -57,6 +59,8 @@ def listar_autorizaciones(actor, estado=None):
             institucion_id=actor.institucion_id, padre_id=actor.pk, vigente=True
         ).values_list("estudiante_id", flat=True)
         qs = qs.filter(estudiante_id__in=hijos_ids)
+    elif actor.rol == Rol.CUIDADOR_FIJO:
+        qs = qs.filter(cuidador__usuario_id=actor.pk)
     if estado:
         qs = qs.filter(estado=estado)
     return qs.order_by("-id")

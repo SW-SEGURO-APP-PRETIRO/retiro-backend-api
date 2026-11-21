@@ -65,12 +65,12 @@ def prepare():
                 "referencia": str(pendiente.pk),
             },
         )
-    print("Vista previa con datos ficticios (2 paneles independientes + Chat):")
-    print("  1. Panel Escolar -> http://127.0.0.1:8000/autenticacion/ingresar/         (o /escolar/)")
-    print("     Admin Escolar : maria.cardenas@ue-los-alisos.edu.ec | Clave: VistaEscolar#2026")
-    print("     Padre Familia : carolina.andrade@ejemplo.ec         | Clave: VistaEscolar#2026")
-    print("  2. Panel Sistema -> http://127.0.0.1:8000/sistema/autenticacion/ingresar/ (o /sistema/)")
-    print("     Admin Sistema : admin.sistema@retiroseguro.test     | Clave: VistaEscolar#2026")
+    print("Vista previa con datos ficticios (Ingreso único en http://127.0.0.1:8000/autenticacion/ingresar/):")
+    print("  1. Admin Sistema (/sistema/) : admin.sistema@retiroseguro.test     | Clave: VistaEscolar#2026")
+    print("  2. Admin Escolar (/escolar/) : maria.cardenas@ue-los-alisos.edu.ec | Clave: VistaEscolar#2026")
+    print("  3. Padre Familia (/escolar/) : carolina.andrade@ejemplo.ec         | Clave: VistaEscolar#2026")
+    print("  4. Guardia       (/escolar/) : jorge.herrera@ue-los-alisos.edu.ec  | Clave: VistaEscolar#2026")
+    print("  5. Cuidador Fijo (/escolar/) : ricardo.zambrano@ue-los-alisos.edu.ec | Clave: VistaEscolar#2026")
 
 if __name__ == "__main__":
     prepare()

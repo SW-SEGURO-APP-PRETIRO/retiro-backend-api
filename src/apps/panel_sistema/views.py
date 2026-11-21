@@ -35,11 +35,11 @@ AUTH_TITLES = {
 @require_GET
 def panel_sistema(request, page="inicio"):
     if not request.user.is_authenticated:
-        return redirect("/sistema/autenticacion/ingresar/")
+        return redirect("/autenticacion/ingresar/")
     if not EsAdminSistema().has_permission(request, None):
         return render(request, "sistema/denegado.html", status=403)
     if request.user.contrasena_temporal:
-        return redirect("/sistema/autenticacion/cambiar-contrasena/")
+        return redirect("/autenticacion/cambiar-contrasena/")
     item = next((p for p in SISTEMA_PAGES if p[0] == page), None)
     if item is None:
         return render(request, "sistema/denegado.html", status=404)
@@ -62,14 +62,5 @@ def panel_sistema(request, page="inicio"):
 def auth_sistema_page(request, mode="ingresar"):
     if mode not in AUTH_TITLES:
         return render(request, "sistema/denegado.html", status=404)
-    if mode == "cambiar-contrasena" and not request.user.is_authenticated:
-        return redirect("/sistema/autenticacion/ingresar/")
-    return render(
-        request,
-        "sistema/auth.html",
-        {
-            "mode": mode,
-            "title": AUTH_TITLES[mode],
-            "preview": getattr(settings, "ESCOLAR_PREVIEW", False),
-        },
-    )
+    return redirect(f"/autenticacion/{mode}/")
+

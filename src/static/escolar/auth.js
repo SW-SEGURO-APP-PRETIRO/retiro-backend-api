@@ -37,16 +37,24 @@ form.addEventListener("submit", async (event) => {
       body: data,
     });
     if (mode === "ingresar") {
-      if (!["ADMIN_ESCOLAR", "PADRE"].includes(result.datos.usuario.rol)) {
+      const rol = result.datos.usuario.rol;
+      if (
+        ![
+          "ADMIN_SISTEMA",
+          "ADMIN_ESCOLAR",
+          "PADRE",
+          "GUARDIA",
+          "CUIDADOR_FIJO",
+        ].includes(rol)
+      ) {
         await api("autenticacion/cerrar-sesion/", { method: "POST" });
-        throw new Error(
-          "Este acceso es exclusivo para administradores escolares y padres o representantes.",
-        );
+        throw new Error("Tu cuenta no tiene un rol válido para ingresar.");
       }
+      const destino = rol === "ADMIN_SISTEMA" ? "/sistema/" : "/escolar/";
       location.assign(
         result.datos.sesion.requiere_cambio_contrasena
           ? "/autenticacion/cambiar-contrasena/"
-          : "/escolar/",
+          : destino,
       );
     } else if (mode === "recuperar") {
       message.textContent = result.mensaje;

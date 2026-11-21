@@ -2,7 +2,7 @@
 {% block body %}
 <main id="main" class="auth-layout">
   <section class="auth-story"><a class="brand" href="/autenticacion/ingresar/"><img src="{% static 'escolar/mark.svg' %}" alt="" width="34" height="38"><span>Retiro Seguro<small>Comunidad escolar protegida</small></span></a><div class="story-content"><p class="eyebrow">Administración escolar</p><h2>Cada salida,<br>en buenas manos.</h2><p>Estudiantes, familias y cuidadores.<br>Un solo lugar para mantener los vínculos claros.</p><div class="school-graphic" aria-hidden="true"><div class="school-roof"></div><div class="school-building"><span></span><span></span><span></span><span></span><i></i></div><div class="school-path"></div><div class="school-tree"></div><div class="school-tree second"></div></div></div><small>Control de accesos y trazabilidad para tu colegio.</small></section>
-  <section class="auth-form-wrap"><div class="auth-form"><p class="eyebrow">Portal de la institución</p><h1>{{ title }}</h1><p class="muted">{% if mode == 'ingresar' %}Ingresa con tu cuenta de administrador escolar o padre/representante.{% elif mode == 'recuperar' %}Indica el correo asociado a tu cuenta.{% else %}Usa al menos 10 caracteres y una contraseña poco común.{% endif %}</p>
+  <section class="auth-form-wrap"><div class="auth-form"><p class="eyebrow">Portal de acceso</p><h1>{{ title }}</h1><p class="muted">{% if mode == 'ingresar' %}Ingresa con tu cuenta.{% elif mode == 'recuperar' %}Indica el correo asociado a tu cuenta.{% else %}Usa al menos 10 caracteres y una contraseña poco común.{% endif %}</p>
   <form id="auth-form">{% csrf_token %}
     {% if mode == 'ingresar' or mode == 'recuperar' %}<label>Correo electrónico<input type="email" name="correo" autocomplete="username" placeholder="tu.nombre@colegio.edu.ec" required maxlength="254"></label>{% endif %}
     {% if mode == 'ingresar' or mode == 'cambiar-contrasena' %}<label>{% if mode == 'ingresar' %}Contraseña{% else %}Contraseña actual{% endif %}<input type="password" name="{% if mode == 'ingresar' %}contrasena{% else %}contrasena_actual{% endif %}" autocomplete="current-password" required></label>{% endif %}
@@ -12,7 +12,7 @@
     <div id="auth-error" class="error-box" role="alert" hidden></div><div id="auth-message" role="status" class="success-box" hidden></div>
     <button class="button primary" type="submit">{% if mode == 'ingresar' %}Entrar al panel <span aria-hidden="true">→</span>{% elif mode == 'recuperar' %}Solicitar recuperación{% else %}Actualizar contraseña{% endif %}</button>
   </form>
-  {% if mode == 'ingresar' %}<a class="auth-link" href="/autenticacion/recuperar/">¿Olvidaste tu contraseña?</a><a class="auth-link muted" href="/sistema/autenticacion/ingresar/">Ir al portal del Administrador del Sistema →</a>{% else %}<a class="auth-link" href="/autenticacion/ingresar/">Volver al inicio de sesión</a>{% endif %}
+  {% if mode == 'ingresar' %}<a class="auth-link" href="/autenticacion/recuperar/">¿Olvidaste tu contraseña?</a>{% else %}<a class="auth-link" href="/autenticacion/ingresar/">Volver al inicio de sesión</a>{% endif %}
   <p class="auth-note">El acceso a la información de estudiantes está reservado al personal autorizado de la institución.</p></div></section>
 </main>
 {% endblock %}

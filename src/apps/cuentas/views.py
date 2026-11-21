@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.instituciones.models import Institucion
-from shared.permissions import EsAdminEscolar, EsAdminSistema, EsAdminSistemaOEscolar, EsPadreOAdminEscolar
+from shared.permissions import EsAdminEscolar, EsAdminSistema, EsAdminSistemaOEscolar, EsMiembroInstitucion, EsPadreOAdminEscolar
 
 from .models import Estudiante, RelacionPadreEstudiante, Rol, Usuario
 from .serializers import (
@@ -145,13 +145,13 @@ class CambiarEstadoUsuarioView(APIView):
 
 
 class EstudianteListCreateView(APIView):
-    permission_classes = [EsPadreOAdminEscolar]
+    permission_classes = [EsMiembroInstitucion]
     serializer_class = EstudianteSerializer
 
     def get_permissions(self):
         if self.request.method == "POST":
             return [EsAdminEscolar()]
-        return [EsPadreOAdminEscolar()]
+        return [EsMiembroInstitucion()]
 
     @extend_schema(tags=["Cuentas"], request=None, responses=EstudianteSerializer(many=True))
     def get(self, request):
@@ -161,6 +161,16 @@ class EstudianteListCreateView(APIView):
                 padre_id=request.user.pk, vigente=True
             ).values_list("estudiante_id", flat=True)
             queryset = queryset.filter(pk__in=hijos_ids)
+        elif request.user.rol == Rol.CUIDADOR_FIJO:
+            from apps.cuidadores.models import AutorizacionCuidador, Cuidador
+            cuidador_ids = Cuidador._base_manager.filter(
+                institucion_id=request.user.institucion_id, usuario_id=request.user.pk
+            ).values_list("pk", flat=True)
+            est_ids = AutorizacionCuidador._base_manager.filter(
+                institucion_id=request.user.institucion_id,
+                cuidador_id__in=cuidador_ids,
+            ).values_list("estudiante_id", flat=True)
+            queryset = queryset.filter(pk__in=est_ids)
         return ok(
             EstudianteSerializer(queryset.order_by("id"), many=True).data,
             "Estudiantes obtenidos.",
