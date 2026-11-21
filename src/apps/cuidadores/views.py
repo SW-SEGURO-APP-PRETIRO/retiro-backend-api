@@ -62,7 +62,7 @@ class CuidadorListCreateView(APIView):
 
     @extend_schema(
         tags=TAG,
-        summary="Registrar un cuidador",
+        summary="Registrar un cuidador desde el cliente móvil",
         request=CrearCuidadorSerializer,
         responses={201: CuidadorSerializer},
         operation_id="cuidadores_create",
@@ -83,7 +83,7 @@ class SolicitarAutorizacionView(APIView):
 
     @extend_schema(
         tags=TAG,
-        summary="Solicitar la autorización de un cuidador para un estudiante",
+        summary="Solicitar desde el cliente móvil la autorización de un cuidador",
         request=SolicitarAutorizacionSerializer,
         responses={201: AutorizacionSerializer},
         operation_id="cuidadores_solicitar_autorizacion",

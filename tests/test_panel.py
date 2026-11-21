@@ -18,6 +18,36 @@ def test_login_publico_emite_csrf(client):
     assert "csrftoken" in response.cookies
     assert b"codigo_totp" in response.content
 
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("rol", "institucion_id"),
+    [
+        ("ADMIN_ESCOLAR", 1),
+        ("ADMIN_SISTEMA", None),
+    ],
+)
+def test_login_api_reconoce_ambos_administradores(client, colegio, rol, institucion_id):
+    usuario = Usuario.objects.create(
+        correo=f"{rol.lower()}@login.test",
+        cedula="1700000088" if rol == "ADMIN_ESCOLAR" else "1700000089",
+        nombres="Administrador",
+        apellidos="Prueba",
+        rol=rol,
+        institucion_id=colegio.pk if rol == "ADMIN_ESCOLAR" else None,
+        estado="ACTIVA",
+    )
+    usuario.set_password("ClaveSegura#2026")
+    usuario.save()
+
+    response = client.post(
+        "/api/v1/autenticacion/ingresar/",
+        {"correo": usuario.correo, "contrasena": "ClaveSegura#2026"},
+        content_type="application/json",
+    )
+    assert response.status_code == 200, response.content
+    assert response.json()["datos"]["usuario"]["rol"] == rol
+
 def test_anonimo_no_ve_panel(client):
     response = client.get("/escolar/")
     assert response.status_code == 302
@@ -33,7 +63,7 @@ def test_pantallas_escolares(client, admin, pantalla):
     assert "no-store" in response.headers["Cache-Control"]
 
 @pytest.mark.django_db
-def test_guardia_y_cuidador_fijo_ven_sus_pantallas_y_no_las_exclusivas_de_admin(client, colegio):
+def test_roles_moviles_no_acceden_al_panel_web(client, colegio):
     guardia = Usuario.objects.create(
         correo="guardia.portal@example.test",
         cedula="1700000011",
@@ -53,20 +83,16 @@ def test_guardia_y_cuidador_fijo_ven_sus_pantallas_y_no_las_exclusivas_de_admin(
         estado="ACTIVA",
     )
     client.force_login(guardia)
-    for permitida in ["", "estudiantes/", "cuidadores/", "cursos/", "puertas/", "chat/", "notificaciones/", "institucion/"]:
-        assert client.get("/escolar/" + permitida).status_code == 200
-    for denegada in ["padres/", "guardias/", "asignaciones/", "bitacora/"]:
-        assert client.get("/escolar/" + denegada).status_code == 403
+    response = client.get("/escolar/")
+    assert response.status_code == 403
+    assert b"Acceso exclusivo para administraci" in response.content
 
     client.force_login(cuidador)
-    for permitida in ["", "estudiantes/", "cuidadores/", "chat/", "notificaciones/", "institucion/"]:
-        assert client.get("/escolar/" + permitida).status_code == 200
-    for denegada in ["padres/", "guardias/", "asignaciones/", "cursos/", "puertas/", "bitacora/"]:
-        assert client.get("/escolar/" + denegada).status_code == 403
+    assert client.get("/escolar/").status_code == 403
 
 
 @pytest.mark.django_db
-def test_padre_ve_sus_pantallas_y_no_las_exclusivas_de_admin_escolar(client, colegio):
+def test_padre_no_accede_al_panel_web_pero_si_a_api_movil(client, colegio):
     padre = Usuario.objects.create(
         correo="padre.portal@example.test",
         cedula="1700000010",
@@ -77,10 +103,8 @@ def test_padre_ve_sus_pantallas_y_no_las_exclusivas_de_admin_escolar(client, col
         estado="ACTIVA",
     )
     client.force_login(padre)
-    for permitida in ["", "estudiantes/", "cuidadores/", "chat/", "notificaciones/", "institucion/"]:
-        assert client.get("/escolar/" + permitida).status_code == 200
-    for denegada in ["padres/", "guardias/", "asignaciones/", "cursos/", "puertas/", "bitacora/"]:
-        assert client.get("/escolar/" + denegada).status_code == 403
+    assert client.get("/escolar/").status_code == 403
+    assert client.get("/api/v1/cuidadores/").status_code == 200
 
 @pytest.mark.django_db
 def test_clave_temporal_redirige(client, admin):
@@ -224,6 +248,91 @@ def test_admin_escolar_puede_rechazar_solicitud_pendiente(client, admin, colegio
     assert autorizacion.estado == "RECHAZADO"
     assert autorizacion.rechazada_por_id == admin.pk
     assert autorizacion.motivo_rechazo == "La identidad no coincide con el registro."
+
+
+@pytest.mark.django_db
+def test_flujo_movil_padre_solicita_y_recibe_aprobacion(client, admin, colegio, monkeypatch):
+    from apps.chat.models import Notificacion
+    from apps.cuentas.models import Estudiante, RelacionPadreEstudiante, Rol
+    from apps.cuidadores.models import AutorizacionCuidador, Cuidador
+    from apps.instituciones.models import Curso
+    from shared.tenancy.context import contexto_institucion
+
+    padre = Usuario.objects.create(
+        correo="padre.movilejemplo@example.test",
+        cedula="1711000022",
+        nombres="Carmen",
+        apellidos="Padre",
+        rol=Rol.PADRE,
+        institucion_id=colegio.pk,
+        estado="ACTIVA",
+    )
+    with contexto_institucion(colegio.pk):
+        curso = Curso.objects.create(institucion_id=colegio.pk, nombre="6to API", hora_salida="13:00")
+        estudiante = Estudiante.objects.create(
+            institucion_id=colegio.pk,
+            cedula="1711000023",
+            nombres="Luis",
+            apellidos="Estudiante",
+            fecha_nacimiento="2015-01-10",
+            curso_id=curso.pk,
+        )
+        RelacionPadreEstudiante.objects.create(
+            institucion_id=colegio.pk,
+            padre=padre,
+            estudiante=estudiante,
+            vigente=True,
+        )
+
+    client.force_login(padre)
+    crear = client.post(
+        "/api/v1/cuidadores/",
+        {
+            "tipo": "FIJO",
+            "cedula": "1711000024",
+            "nombres": "Andrea",
+            "apellidos": "Móvil",
+            "telefono": "0991112233",
+            "correo": "andrea.movilejemplo@example.test",
+        },
+        content_type="application/json",
+    )
+    assert crear.status_code == 201, crear.content
+    cuidador_id = crear.json()["datos"]["id"]
+
+    solicitar = client.post(
+        f"/api/v1/cuidadores/{cuidador_id}/solicitar-autorizacion/",
+        {"estudiante_id": estudiante.pk},
+        content_type="application/json",
+    )
+    assert solicitar.status_code == 201, solicitar.content
+    autorizacion_id = solicitar.json()["datos"]["id"]
+
+    pendiente_admin = client.get("/api/v1/cuidadores/autorizaciones/")
+    assert pendiente_admin.status_code == 200
+
+    monkeypatch.setattr(
+        "apps.cuidadores.services.send_mail",
+        lambda **kwargs: 1,
+    )
+    client.force_login(admin)
+    aprobar = client.post(
+        f"/api/v1/cuidadores/autorizaciones/{autorizacion_id}/aprobar/",
+        {},
+        content_type="application/json",
+    )
+    assert aprobar.status_code == 200, aprobar.content
+
+    aprobacion = Notificacion._base_manager.filter(
+        institucion_id=colegio.pk,
+        destinatario_id=padre.pk,
+        tipo="ACCESO_EMITIDO",
+    ).first()
+    assert aprobacion is not None
+    assert "aprobada" in aprobacion.titulo.lower() or "aprobada" in aprobacion.mensaje.lower()
+
+    autorizacion = AutorizacionCuidador._base_manager.get(pk=autorizacion_id)
+    assert autorizacion.estado == "ACCESO_EMITIDO"
 
 
 @pytest.fixture

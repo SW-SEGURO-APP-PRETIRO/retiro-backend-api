@@ -203,6 +203,28 @@ def sembrar(clave: str | None = None) -> dict:
                     {"cuidador_id": cuidador.pk, "tipo": cuidador.tipo},
                 )
 
+            temporal_cedula = _cedula(f"17{inst.id}30{inst.id:02d}00")
+            temporal = Cuidador._base_manager.filter(
+                institucion_id=inst.id,
+                cedula=temporal_cedula,
+            ).first()
+            if temporal is None:
+                temporal = Cuidador.objects.create(
+                    institucion_id=inst.id,
+                    tipo=Cuidador.Tipo.TEMPORAL,
+                    usuario_id=None,
+                    cedula=temporal_cedula,
+                    nombres="Cuidador temporal",
+                    apellidos=f"Demostración {i}",
+                    telefono="",
+                    correo="",
+                )
+                registrar(
+                    admin,
+                    "CUIDADOR_CREADO",
+                    {"cuidador_id": temporal.pk, "tipo": temporal.tipo},
+                )
+
             for k, ((nombres, apellidos, fecha_nacimiento), curso) in enumerate(
                 zip(datos["estudiantes"], cursos),
                 start=1,

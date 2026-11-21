@@ -38,23 +38,24 @@ form.addEventListener("submit", async (event) => {
     });
     if (mode === "ingresar") {
       const rol = result.datos.usuario.rol;
-      if (
-        ![
-          "ADMIN_SISTEMA",
-          "ADMIN_ESCOLAR",
-          "PADRE",
-          "GUARDIA",
-          "CUIDADOR_FIJO",
-        ].includes(rol)
-      ) {
-        await api("autenticacion/cerrar-sesion/", { method: "POST" });
-        throw new Error("Tu cuenta no tiene un rol válido para ingresar.");
+      if (rol === "ADMIN_SISTEMA") {
+        location.assign(
+          result.datos.sesion.requiere_cambio_contrasena
+            ? "/autenticacion/cambiar-contrasena/"
+            : "/sistema/",
+        );
+        return;
       }
-      const destino = rol === "ADMIN_SISTEMA" ? "/sistema/" : "/escolar/";
+      if (rol !== "ADMIN_ESCOLAR") {
+        await api("autenticacion/cerrar-sesion/", { method: "POST" });
+        throw new Error(
+          "Acceso exclusivo para administración: los padres, guardias y cuidadores fijos no tienen acceso a los paneles web.",
+        );
+      }
       location.assign(
         result.datos.sesion.requiere_cambio_contrasena
           ? "/autenticacion/cambiar-contrasena/"
-          : destino,
+          : "/escolar/",
       );
     } else if (mode === "recuperar") {
       message.textContent = result.mensaje;
