@@ -37,11 +37,26 @@ class ErrorEnvioCorreo(Exception):
 
 # ------------------------------------------------------------------------------ Consultas
 def listar_cuidadores(actor):
-    return Cuidador._base_manager.filter(institucion_id=actor.institucion_id).order_by("id")
+    qs = Cuidador._base_manager.filter(institucion_id=actor.institucion_id)
+    if actor.rol == Rol.PADRE:
+        hijos_ids = cuentas.RelacionPadreEstudiante._base_manager.filter(
+            institucion_id=actor.institucion_id, padre_id=actor.pk, vigente=True
+        ).values_list("estudiante_id", flat=True)
+        cuidadores_ids = AutorizacionCuidador._base_manager.filter(
+            institucion_id=actor.institucion_id,
+            estudiante_id__in=hijos_ids,
+        ).values_list("cuidador_id", flat=True)
+        qs = qs.filter(pk__in=cuidadores_ids)
+    return qs.order_by("id")
 
 
 def listar_autorizaciones(actor, estado=None):
     qs = AutorizacionCuidador._base_manager.filter(institucion_id=actor.institucion_id).select_related("cuidador")
+    if actor.rol == Rol.PADRE:
+        hijos_ids = cuentas.RelacionPadreEstudiante._base_manager.filter(
+            institucion_id=actor.institucion_id, padre_id=actor.pk, vigente=True
+        ).values_list("estudiante_id", flat=True)
+        qs = qs.filter(estudiante_id__in=hijos_ids)
     if estado:
         qs = qs.filter(estado=estado)
     return qs.order_by("-id")

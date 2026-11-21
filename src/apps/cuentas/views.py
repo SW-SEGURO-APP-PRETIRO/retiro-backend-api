@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.instituciones.models import Institucion
-from shared.permissions import EsAdminEscolar, EsAdminSistema, EsAdminSistemaOEscolar
+from shared.permissions import EsAdminEscolar, EsAdminSistema, EsAdminSistemaOEscolar, EsPadreOAdminEscolar
 
 from .models import Estudiante, RelacionPadreEstudiante, Rol, Usuario
 from .serializers import (
@@ -51,6 +51,12 @@ class UsuarioListCreateView(APIView):
         rol = request.query_params.get("rol")
         if rol:
             queryset = queryset.filter(rol=rol)
+        estado = request.query_params.get("estado")
+        if estado:
+            queryset = queryset.filter(estado=estado)
+        institucion_id = request.query_params.get("institucion_id")
+        if institucion_id and request.user.rol == Rol.ADMIN_SISTEMA:
+            queryset = queryset.filter(institucion_id=institucion_id)
         return ok(UsuarioSerializer(queryset.order_by("id"), many=True).data, "Usuarios obtenidos.")
 
     @extend_schema(tags=["Cuentas"], request=CrearUsuarioSerializer)
@@ -139,13 +145,24 @@ class CambiarEstadoUsuarioView(APIView):
 
 
 class EstudianteListCreateView(APIView):
-    permission_classes = [EsAdminEscolar]
+    permission_classes = [EsPadreOAdminEscolar]
     serializer_class = EstudianteSerializer
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [EsAdminEscolar()]
+        return [EsPadreOAdminEscolar()]
 
     @extend_schema(tags=["Cuentas"], request=None, responses=EstudianteSerializer(many=True))
     def get(self, request):
+        queryset = Estudiante.objects.all()
+        if request.user.rol == Rol.PADRE:
+            hijos_ids = RelacionPadreEstudiante.objects.filter(
+                padre_id=request.user.pk, vigente=True
+            ).values_list("estudiante_id", flat=True)
+            queryset = queryset.filter(pk__in=hijos_ids)
         return ok(
-            EstudianteSerializer(Estudiante.objects.all().order_by("id"), many=True).data,
+            EstudianteSerializer(queryset.order_by("id"), many=True).data,
             "Estudiantes obtenidos.",
         )
 

@@ -18,6 +18,10 @@ const paths = {
   arrow: "M4 12h16 M15 7l5 5-5 5",
   plus: "M12 4v16 M4 12h16",
   refresh: "M20 7a9 9 0 1 0 1 9 M20 2v5h-5",
+  lock: "M5 11h14v10H5Z M8 11V7a4 4 0 0 1 8 0v4 M12 15v2",
+  key: "M7 14a4 4 0 1 1 3.7-5.5L21 8.5v4h-3v3h-3v-3h-4.3A4 4 0 0 1 7 14Z",
+  alert: "M12 3 2 20h20Z M12 9v5 M12 17h.01",
+  chat: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10Z",
 };
 export const icon = (name) =>
   `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name] || paths.school}"/></svg>`;
@@ -51,12 +55,28 @@ export function human(value) {
     INACTIVO: "Inactivo",
     REVOCADO: "Revocado",
     RECHAZADO: "Rechazado",
+    RECHAZADA: "Rechazada",
     EXPIRADO: "Expirado",
     PENDIENTE: "Pendiente",
+    PENDIENTE_APROBACION: "Pendiente de aprobación",
+    PENDIENTE_VERIFICACION: "Pendiente de verificación",
     BLOQUEADA: "Bloqueada",
     SUSPENDIDA: "Suspendida",
     EXITO: "Exitoso",
     FALLO: "Fallido",
+    ADMIN_SISTEMA: "Admin. del Sistema",
+    ADMIN_ESCOLAR: "Admin. Escolar",
+    PADRE: "Padre / representante",
+    GUARDIA: "Guardia",
+    CUIDADOR_FIJO: "Cuidador fijo",
+    TECNICA: "Técnica",
+    OPERATIVA: "Operativa",
+    INSTITUCION_REGISTRADA: "Institución registrada",
+    INSTITUCION_APROBADA: "Institución aprobada",
+    INSTITUCION_RECHAZADA: "Institución rechazada",
+    INSTITUCION_SUSPENDIDA: "Institución suspendida",
+    INSTITUCION_REACTIVADA: "Institución reactivada",
+    INTENTO_INGRESO_FALLIDO: "Intento de ingreso fallido",
     ESTUDIANTE_CREADO: "Estudiante registrado",
     ESTUDIANTE_ACTUALIZADO: "Estudiante actualizado",
     USUARIO_CREADO: "Cuenta creada",
@@ -89,11 +109,11 @@ export function human(value) {
   );
 }
 export function badge(value) {
-  const type = ["ACTIVO", "ACTIVA", "ACCESO_EMITIDO", "EXITO"].includes(value)
+  const type = ["ACTIVO", "ACTIVA", "ACCESO_EMITIDO", "EXITO", "INTEGRA"].includes(value)
     ? "good"
-    : ["FALLO", "BLOQUEADA", "REVOCADO", "RECHAZADO"].includes(value)
+    : ["FALLO", "BLOQUEADA", "REVOCADO", "RECHAZADO", "RECHAZADA", "INCONSISTENTE"].includes(value)
       ? "bad"
-      : ["SOLICITADO", "PENDIENTE"].includes(value)
+      : ["SOLICITADO", "PENDIENTE", "PENDIENTE_APROBACION", "PENDIENTE_VERIFICACION", "SUSPENDIDA"].includes(value)
         ? "warn"
         : "neutral";
   return `<span class="badge ${type}"><span class="status-dot"></span>${e(human(value))}</span>`;

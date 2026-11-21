@@ -1,5 +1,9 @@
 import { api, errorText, escapeHTML as e, rows } from "./api.js";
-import { catalog, institutionFields } from "./catalog.js";
+import {
+  catalog,
+  institutionFields,
+  caregiverApplicationFields,
+} from "./catalog.js";
 import {
   icons,
   icon,
@@ -28,7 +32,13 @@ const state = {
   previous: false,
   institution: null,
   busy: false,
+  user: null,
+  chatRooms: [],
+  chatMessages: [],
+  chatContacts: [],
+  activeRoomId: null,
 };
+const isPadre = () => state.user?.rol === "PADRE";
 let loadVersion = 0;
 icons();
 const find = (source, id) =>
@@ -58,6 +68,8 @@ function cell(row, key) {
     case "padre":
       return e(name(find("padres", row.padre)));
     case "solicitante":
+      if (isPadre() && String(row.solicitada_por_id) === String(state.user?.id))
+        return e(name(state.user));
       return e(name(find("padres", row.solicitada_por_id)));
     case "cuidador":
       return person(row.cuidador, human(row.cuidador.tipo));
@@ -86,6 +98,12 @@ function cell(row, key) {
 function rowActions(row) {
   const b = (action, label, extra = "") =>
     `<button class="text-button ${extra}" data-action="${action}" data-id="${row.id}">${label}</button>`;
+  if (isPadre()) {
+    if (page === "cuidadores") return b("detail", "Ver detalle");
+    if (page === "notificaciones")
+      return row.leida ? "" : b("read", "Marcar leída");
+    return "";
+  }
   if (page === "cuidadores")
     return (
       b("detail", "Ver detalle") +
@@ -221,18 +239,83 @@ async function sources() {
     estudiantes: "cuentas/estudiantes/",
     padres: "cuentas/usuarios/?rol=PADRE",
   };
-  const needed =
-    {
-      inicio: ["cursos", "estudiantes", "padres"],
-      estudiantes: ["cursos"],
-      guardias: ["puertas"],
-      asignaciones: ["estudiantes", "padres"],
-      cuidadores: ["padres"],
-    }[page] || [];
+  const needed = isPadre()
+    ? {
+        inicio: ["cursos", "estudiantes"],
+        estudiantes: ["cursos"],
+        cuidadores: ["estudiantes"],
+      }[page] || []
+    : {
+        inicio: ["cursos", "estudiantes", "padres"],
+        estudiantes: ["cursos"],
+        guardias: ["puertas"],
+        asignaciones: ["estudiantes", "padres"],
+        cuidadores: ["padres", "estudiantes"],
+      }[page] || [];
   const results = await Promise.all(
     needed.map(async (key) => [key, rows(await api(endpoints[key]))]),
   );
   for (const [key, value] of results) state.sources[key] = value;
+}
+
+async function requestCaregiverModal() {
+  const dialog = document.querySelector("#editor");
+  const form = document.querySelector("#editor-form");
+  document.querySelector("#dialog-title").textContent =
+    "Solicitar autorización de cuidador";
+  document.querySelector("#dialog-description").textContent =
+    "Registra los datos del cuidador y selecciona a tu hijo. El administrador escolar revisará la solicitud.";
+  document.querySelector("#form-fields").innerHTML = fieldsHTML(
+    caregiverApplicationFields,
+    { tipo: "FIJO" },
+    state.sources,
+  );
+  const box = document.querySelector("#form-error");
+  box.hidden = true;
+  form.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const button = document.querySelector("#save-button");
+    if (button.disabled) return;
+    button.disabled = true;
+    button.textContent = "Enviando…";
+    box.hidden = true;
+    try {
+      const payload = formData(caregiverApplicationFields, form);
+      const estudianteId = payload.estudiante_id;
+      delete payload.estudiante_id;
+      let cuidadorId;
+      try {
+        const created = await api("cuidadores/", {
+          method: "POST",
+          body: payload,
+        });
+        cuidadorId = created.datos.id;
+      } catch (err) {
+        const list = rows(await api("cuidadores/"));
+        const existing = list.find((c) => c.cedula === payload.cedula);
+        if (!existing) throw err;
+        cuidadorId = existing.id;
+      }
+      const authRes = await api(
+        `cuidadores/${cuidadorId}/solicitar-autorizacion/`,
+        {
+          method: "POST",
+          body: { estudiante_id: estudianteId },
+        },
+      );
+      dialog.close();
+      toast(authRes.mensaje || "Solicitud de cuidador registrada.");
+      if (page === "cuidadores") await loadRecords();
+      else if (page === "inicio") await parentOverview();
+    } catch (error) {
+      box.textContent = errorText(error);
+      box.hidden = false;
+    } finally {
+      button.disabled = false;
+      button.textContent = "Guardar cambios";
+    }
+  };
+  dialog.showModal();
 }
 async function edit(row = null) {
   const dialog = document.querySelector("#editor"),
@@ -522,6 +605,171 @@ async function overview() {
   counter.hidden = !pending.length;
   content.setAttribute("aria-busy", "false");
 }
+
+async function parentOverview() {
+  const result = await Promise.all([
+    api("cuidadores/autorizaciones/"),
+    api("notificaciones/?tamano=4"),
+  ]);
+  const authorizations = rows(result[0]);
+  const notifications = rows(result[1]);
+  const children = state.sources.estudiantes || [];
+  const courses = state.sources.cursos || [];
+  const activeAuth = authorizations.filter((a) =>
+    ["ACTIVO", "ACCESO_EMITIDO"].includes(a.estado),
+  );
+  const pendingAuth = authorizations.filter((a) => a.estado === "SOLICITADO");
+
+  content.innerHTML = `<div class="overview-date"><span>${new Intl.DateTimeFormat("es-EC", { dateStyle: "full", timeZone: "America/Guayaquil" }).format(new Date())}</span><span>Portal familiar · ${e(state.institution?.nombre || "Mi institución")}</span></div>
+    <section class="metrics" aria-label="Resumen familiar">
+      <div><span>Hijos vinculados</span><strong>${children.length}</strong><small>Estudiantes bajo tu representación</small></div>
+      <div><span>Cuidadores autorizados</span><strong>${activeAuth.length}</strong><small>Con acceso emitido o activo</small></div>
+      <div><span>Solicitudes en revisión</span><strong class="${pendingAuth.length ? "attention" : ""}">${pendingAuth.length}</strong><small>Pendientes de aprobación escolar</small></div>
+      <div><span>Notificaciones</span><strong>${notifications.filter((n) => !n.leida).length}</strong><small>Avisos recientes sin leer</small></div>
+    </section>
+    <div class="overview-grid">
+      <section class="panel">
+        <div class="section-heading"><div><h2>Mis hijos</h2><p>Estudiantes y sus horarios de salida oficiales.</p></div><a href="/escolar/estudiantes/" class="text-link">Ver detalle ${icon("arrow")}</a></div>
+        ${
+          children.length
+            ? children
+                .map((s) => {
+                  const curso = find("cursos", s.curso_id);
+                  const salida = time(
+                    s.hora_salida_especial || curso?.hora_salida,
+                  );
+                  return `<div class="compact-row">${person(s, `${curso ? curso.nombre : "Curso"} · Salida ${salida}`)}${badge(s.estado)}</div>`;
+                })
+                .join("")
+            : `<div class="inline-empty">${icon("students")}<div><strong>Sin estudiantes vinculados</strong><p>Solicita a la administración del colegio que vincule tu cuenta con tus hijos.</p></div></div>`
+        }
+      </section>
+      <section class="panel">
+        <div class="section-heading"><div><h2>Estado de mis cuidadores</h2><p>Personas autorizadas para retirar a tus hijos.</p></div><a href="/escolar/cuidadores/" class="text-link">Gestionar ${icon("arrow")}</a></div>
+        ${
+          authorizations.length
+            ? authorizations
+                .slice(0, 4)
+                .map(
+                  (r) =>
+                    `<div class="request-row">${person(r.cuidador, `${human(r.cuidador.tipo)} · ${r.estudiante_nombre || "Estudiante #" + r.estudiante_id}`)}${badge(r.estado)}</div>`,
+                )
+                .join("")
+            : `<div class="inline-empty">${icon("check")}<div><strong>Aún no has registrado cuidadores</strong><p>Puedes registrar un cuidador fijo o temporal y solicitar su autorización.</p></div></div>`
+        }
+        <a class="section-footer" href="/escolar/cuidadores/">Registrar o revisar cuidadores ${icon("arrow")}</a>
+      </section>
+    </div>
+    <div class="overview-grid lower">
+      <section class="panel">
+        <div class="section-heading"><div><h2>Horarios del colegio</h2><p>Jornadas regulares de salida.</p></div><a href="/escolar/chat/" class="text-link">Abrir chat con el colegio ${icon("arrow")}</a></div>
+        ${
+          courses.length
+            ? `<div class="schedule">${courses
+                .filter((c) => c.activo)
+                .slice(0, 6)
+                .map(
+                  (c) =>
+                    `<div class="schedule-row"><span>${e(c.nombre)}</span><span class="schedule-track"></span><strong>${e(time(c.hora_salida))}</strong></div>`,
+                )
+                .join("")}</div>`
+            : '<p class="section-empty">Horarios no disponibles.</p>'
+        }
+      </section>
+      <section class="panel">
+        <div class="section-heading"><div><h2>Últimas notificaciones</h2><p>Avisos sobre retiros y autorizaciones.</p></div><a href="/escolar/notificaciones/" class="text-link">Ver todas ${icon("arrow")}</a></div>
+        ${
+          notifications.length
+            ? notifications
+                .map(
+                  (n) =>
+                    `<a class="notification-row" href="/escolar/notificaciones/"><span class="status-dot ${n.leida ? "" : "unread"}"></span><div><strong>${e(n.titulo)}</strong><small>${e(date(n.creada_en))}</small></div>${icon("arrow")}</a>`,
+                )
+                .join("")
+            : '<p class="section-empty">Todavía no tienes notificaciones.</p>'
+        }
+      </section>
+    </div>`;
+  content.setAttribute("aria-busy", "false");
+}
+
+async function loadChat() {
+  content.setAttribute("aria-busy", "true");
+  errorBox.hidden = true;
+  try {
+    const res = await api("chat/general/");
+    const sala = res.datos?.sala || null;
+    state.activeRoomId = sala?.id || null;
+    state.chatRooms = sala ? [sala] : [];
+    state.chatMessages = Array.isArray(res.datos?.mensajes)
+      ? res.datos.mensajes
+      : [];
+    renderChatView();
+  } catch (error) {
+    showError(error);
+  } finally {
+    content.setAttribute("aria-busy", "false");
+  }
+}
+
+function renderChatView() {
+  const activeRoom = state.chatRooms[0] || {
+    nombre: `Sala general · ${state.institution?.nombre || "Mi institución"}`,
+    tipo: "GENERAL",
+  };
+  content.innerHTML = `<section class="panel" style="display:flex;flex-direction:column;min-height:480px;max-height:640px">
+    <header class="chat-header">
+      <div><strong>${e(activeRoom.nombre || "Sala general de la institución")}</strong><br><small class="muted">Sala general única del colegio · Participan administradores escolares, padres, guardias y cuidadores fijos</small></div>
+      ${badge("ACTIVA")}
+    </header>
+    <div class="chat-messages" id="chat-messages">
+      ${
+        state.chatMessages.length
+          ? state.chatMessages
+              .map((m) => {
+                const mine = String(m.autor_id) === String(state.user?.id);
+                return `<div class="chat-bubble ${mine ? "mine" : ""}">
+                  <div class="chat-bubble-meta"><strong>${e(mine ? "Tú" : m.autor_nombre)}</strong><span>${e(human(m.autor_rol))}</span><span>· ${e(date(m.enviado_en))}</span></div>
+                  <div>${e(m.contenido)}</div>
+                </div>`;
+              })
+              .join("")
+          : `<div class="inline-empty">${icon("chat")}<div><strong>Sala general lista</strong><p>Escribe un mensaje abajo para comunicarte con la comunidad de tu institución.</p></div></div>`
+      }
+    </div>
+    <form class="chat-composer" id="chat-form">
+      <input id="chat-input" name="contenido" placeholder="Escribe un mensaje en la sala general…" maxlength="2000" autocomplete="off" required>
+      <button class="button primary" type="submit">Enviar mensaje</button>
+    </form>
+  </section>`;
+
+  const msgBox = document.querySelector("#chat-messages");
+  if (msgBox) msgBox.scrollTop = msgBox.scrollHeight;
+
+  document.querySelector("#chat-form")?.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const input = ev.target.elements.contenido;
+    const text = input.value.trim();
+    if (!text) return;
+    const btn = ev.target.querySelector("button");
+    btn.disabled = true;
+    try {
+      await api("chat/general/", {
+        method: "POST",
+        body: {
+          sala_id: state.activeRoomId,
+          contenido: text,
+        },
+      });
+      input.value = "";
+      await loadChat();
+    } catch (error) {
+      showError(error);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
 async function updateNotificationCount() {
   const result = await api("notificaciones/?tamano=1");
   document.querySelector("#unread-dot").hidden = !result.datos.no_leidas;
@@ -557,6 +805,13 @@ function connectNotifications() {
       updateNotificationCount().catch(() => {});
       if (page === "notificaciones") loadRecords();
     }
+    if (data.evento === "chat.mensaje" && data.mensaje) {
+      if (page === "chat") {
+        loadChat(true);
+      } else if (String(data.mensaje.autor_id) !== String(state.user?.id)) {
+        toast(`Nuevo mensaje de ${data.mensaje.autor_nombre}: ${data.mensaje.contenido.slice(0, 60)}`);
+      }
+    }
   };
   socket.onclose = (event) => {
     clearInterval(pingTimer);
@@ -583,30 +838,50 @@ window.addEventListener("pagehide", () => {
 async function start() {
   try {
     const profile = await api("autenticacion/perfil/");
-    if (profile.datos.usuario.rol !== "ADMIN_ESCOLAR")
-      throw new Error("Esta cuenta no pertenece a la administración escolar.");
+    const rol = profile.datos.usuario.rol;
+    if (!["ADMIN_ESCOLAR", "PADRE"].includes(rol))
+      throw new Error("Esta cuenta no pertenece al portal escolar.");
     if (profile.datos.requiere_cambio_contrasena) {
       location.assign("/autenticacion/cambiar-contrasena/");
       return;
     }
+    state.user = profile.datos.usuario;
     state.institution = (await api("instituciones/mi-institucion/")).datos;
     document.querySelector("#school-name").textContent =
       state.institution.nombre;
     await sources();
     if (page === "inicio") {
-      actions.innerHTML = `<a href="/escolar/estudiantes/" class="button primary">${icon("plus")} Gestionar estudiantes</a>`;
-      await overview();
+      if (isPadre()) {
+        actions.innerHTML = `<a href="/escolar/cuidadores/" class="button primary">${icon("plus")} Solicitar cuidador</a>`;
+        await parentOverview();
+      } else {
+        actions.innerHTML = `<a href="/escolar/estudiantes/" class="button primary">${icon("plus")} Gestionar estudiantes</a>`;
+        await overview();
+      }
+    } else if (page === "chat") {
+      actions.innerHTML = `<button class="button" id="refresh-chat">${icon("refresh")} Actualizar</button>`;
+      document.querySelector("#refresh-chat").onclick = () => loadChat();
+      await loadChat();
     } else if (page === "institucion") {
-      actions.innerHTML =
-        '<button class="button primary" id="edit-institution">Editar institución</button>';
-      document.querySelector("#edit-institution").onclick = () =>
-        edit(state.institution);
+      if (isPadre()) {
+        actions.innerHTML = `<a href="/escolar/chat/" class="button primary">${icon("chat")} Contactar al colegio</a>`;
+      } else {
+        actions.innerHTML =
+          '<button class="button primary" id="edit-institution">Editar institución</button>';
+        document.querySelector("#edit-institution").onclick = () =>
+          edit(state.institution);
+      }
       renderInstitution();
     } else {
-      actions.innerHTML = `<button class="button" id="refresh" aria-label="Actualizar listado">${icon("refresh")} Actualizar</button>${config.create ? `<button class="button primary" id="create">${icon("plus")} ${config.create}</button>` : ""}${page === "notificaciones" ? '<button class="button primary" id="read-all">Marcar todas leídas</button>' : ""}`;
+      const canCreate = !isPadre() && config.create;
+      const padreCaregiverCreate = isPadre() && page === "cuidadores";
+      actions.innerHTML = `<button class="button" id="refresh" aria-label="Actualizar listado">${icon("refresh")} Actualizar</button>${canCreate ? `<button class="button primary" id="create">${icon("plus")} ${config.create}</button>` : ""}${padreCaregiverCreate ? `<button class="button primary" id="request-caregiver">${icon("plus")} Solicitar cuidador</button>` : ""}${page === "notificaciones" ? '<button class="button primary" id="read-all">Marcar todas leídas</button>' : ""}`;
       document
         .querySelector("#create")
         ?.addEventListener("click", () => edit());
+      document
+        .querySelector("#request-caregiver")
+        ?.addEventListener("click", () => requestCaregiverModal());
       document.querySelector("#refresh").onclick = () => loadRecords();
       document.querySelector("#read-all")?.addEventListener("click", () =>
         confirm(

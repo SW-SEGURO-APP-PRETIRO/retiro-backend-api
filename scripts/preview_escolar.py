@@ -24,13 +24,53 @@ def prepare():
     with sin_filtro():
         colegio = Institucion.objects.get(correo="administracion@ue-los-alisos.edu.ec")
         admin = Usuario.objects.get(correo="maria.cardenas@ue-los-alisos.edu.ec")
+        admin_sistema = Usuario.objects.get(correo="admin.sistema@retiroseguro.test")
         padre = Usuario.objects.get(correo="carolina.andrade@ejemplo.ec")
         student = Estudiante.objects.filter(institucion_id=colegio.pk).first()
         cuidador, _ = Cuidador.objects.get_or_create(institucion_id=colegio.pk, cedula=_cedula("171600001"), defaults={"tipo":"FIJO", "nombres":"Lucía", "apellidos":"Mendoza Cevallos", "correo":"lucia.mendoza@ejemplo.ec", "telefono":"0990000000"})
         AutorizacionCuidador.objects.get_or_create(institucion_id=colegio.pk, cuidador=cuidador, estudiante_id=student.pk, defaults={"solicitada_por_id":padre.pk, "estado":"SOLICITADO", "solicitada_en":timezone.now(), "firma_hmac":"demo"})
         Notificacion.objects.get_or_create(institucion_id=colegio.pk, destinatario_id=admin.pk, tipo="SOLICITUD_CUIDADOR", defaults={"titulo":"Nueva solicitud de cuidador", "mensaje":"Una familia solicitó un nuevo acceso. Revisa la solicitud.", "referencia":cuidador.pk})
-    print("Vista previa con datos ficticios: http://127.0.0.1:8000/escolar/")
-    print("Cuenta local: maria.cardenas@ue-los-alisos.edu.ec | Clave: VistaEscolar#2026")
+        from seed_demo import _ruc
+        pendiente, _ = Institucion.objects.get_or_create(
+            correo="rectorado@colegio-san-gabriel.edu.ec",
+            defaults={
+                "nombre": "Unidad Educativa San Gabriel del Valle",
+                "ruc": _ruc("179300001"),
+                "direccion": "Av. América y Mariana de Jesús, Quito",
+                "telefono": "022450890",
+                "responsable": "Dr. Esteban Patricio Villacreses",
+                "estado": Institucion.Estado.PENDIENTE_APROBACION,
+            },
+        )
+        if not Usuario.objects.filter(correo="esteban.villacreses@colegio-san-gabriel.edu.ec").exists():
+            u_pend = Usuario.objects.crear_usuario(
+                correo="esteban.villacreses@colegio-san-gabriel.edu.ec",
+                password="VistaEscolar#2026",
+                cedula=_cedula("171700001"),
+                nombres="Esteban Patricio",
+                apellidos="Villacreses",
+                rol="ADMIN_ESCOLAR",
+                institucion_id=pendiente.pk,
+                estado="PENDIENTE",
+            )
+            u_pend.contrasena_temporal = True
+            u_pend.save(update_fields=["contrasena_temporal"])
+        Notificacion.objects.get_or_create(
+            institucion_id=0,
+            destinatario_id=admin_sistema.pk,
+            tipo="INSTITUCION_PENDIENTE",
+            defaults={
+                "titulo": "Institución pendiente de aprobación",
+                "mensaje": f"{pendiente.nombre} solicitó registrarse y espera su aprobación.",
+                "referencia": str(pendiente.pk),
+            },
+        )
+    print("Vista previa con datos ficticios (2 paneles independientes + Chat):")
+    print("  1. Panel Escolar -> http://127.0.0.1:8000/autenticacion/ingresar/         (o /escolar/)")
+    print("     Admin Escolar : maria.cardenas@ue-los-alisos.edu.ec | Clave: VistaEscolar#2026")
+    print("     Padre Familia : carolina.andrade@ejemplo.ec         | Clave: VistaEscolar#2026")
+    print("  2. Panel Sistema -> http://127.0.0.1:8000/sistema/autenticacion/ingresar/ (o /sistema/)")
+    print("     Admin Sistema : admin.sistema@retiroseguro.test     | Clave: VistaEscolar#2026")
 
 if __name__ == "__main__":
     prepare()

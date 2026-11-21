@@ -6,17 +6,25 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.cuentas.models import Rol
-from shared.permissions import EsAdminEscolar, EsAdminSistema
+from shared.permissions import EsAdminEscolar, EsAdminSistema, EsPadreOAdminEscolar
 
 from .models import Curso, Institucion, Puerta
 from .serializers import (
     CursoSerializer,
     DecisionInstitucionSerializer,
     InstitucionSerializer,
+    MotivoEstadoInstitucionSerializer,
     PuertaSerializer,
     RegistroInstitucionSerializer,
 )
-from .services import decidir_institucion, guardar_curso, guardar_puerta, registrar_institucion
+from .services import (
+    decidir_institucion,
+    guardar_curso,
+    guardar_puerta,
+    reactivar_institucion,
+    registrar_institucion,
+    suspender_institucion,
+)
 
 
 def ok(datos, mensaje, http_status=status.HTTP_200_OK):
@@ -33,6 +41,20 @@ def error(codigo, mensaje, detalles=None, http_status=status.HTTP_400_BAD_REQUES
 class RegistroInstitucionView(APIView):
     permission_classes = [AllowAny]
     serializer_class = RegistroInstitucionSerializer
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [EsAdminSistema()]
+        return [AllowAny()]
+
+    @extend_schema(tags=["Instituciones"], request=None, responses=InstitucionSerializer(many=True))
+    def get(self, request):
+        queryset = Institucion.objects.all()
+        estado = request.query_params.get("estado")
+        if estado:
+            queryset = queryset.filter(estado=estado)
+        data = InstitucionSerializer(queryset.order_by("id"), many=True).data
+        return ok(data, "Instituciones obtenidas.")
 
     @extend_schema(tags=["Instituciones"], request=RegistroInstitucionSerializer)
     def post(self, request):
@@ -94,9 +116,55 @@ class AprobarInstitucionView(APIView):
         return ok(InstitucionSerializer(institucion).data, "Decisión de institución registrada.")
 
 
-class MiInstitucionView(APIView):
-    permission_classes = [EsAdminEscolar]
+class InstitucionDetailView(APIView):
+    permission_classes = [EsAdminSistema]
     serializer_class = InstitucionSerializer
+
+    @extend_schema(tags=["Instituciones"], request=None, responses=InstitucionSerializer)
+    def get(self, request, pk):
+        try:
+            institucion = Institucion.objects.get(pk=pk)
+        except Institucion.DoesNotExist:
+            return error("NO_ENCONTRADO", "La institución no existe.", http_status=status.HTTP_404_NOT_FOUND)
+        return ok(InstitucionSerializer(institucion).data, "Institución obtenida.")
+
+
+class CambiarEstadoInstitucionView(APIView):
+    permission_classes = [EsAdminSistema]
+    serializer_class = MotivoEstadoInstitucionSerializer
+
+    @extend_schema(tags=["Instituciones"], request=MotivoEstadoInstitucionSerializer, responses=InstitucionSerializer)
+    def post(self, request, pk, accion):
+        serializer = MotivoEstadoInstitucionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            institucion = Institucion.objects.get(pk=pk)
+            if accion == "suspender":
+                institucion = suspender_institucion(
+                    institucion, request.user, serializer.validated_data.get("motivo", "")
+                )
+                mensaje = "Institución suspendida."
+            elif accion == "reactivar":
+                institucion = reactivar_institucion(institucion, request.user)
+                mensaje = "Institución reactivada."
+            else:
+                return error("RUTA_INVALIDA", "Acción no soportada.", http_status=status.HTTP_404_NOT_FOUND)
+        except Institucion.DoesNotExist:
+            return error("NO_ENCONTRADO", "La institución no existe.", http_status=status.HTTP_404_NOT_FOUND)
+        except ValueError as exc:
+            return error("ESTADO_INVALIDO", str(exc), http_status=status.HTTP_409_CONFLICT)
+        return ok(InstitucionSerializer(institucion).data, mensaje)
+
+
+
+class MiInstitucionView(APIView):
+    permission_classes = [EsPadreOAdminEscolar]
+    serializer_class = InstitucionSerializer
+
+    def get_permissions(self):
+        if self.request.method == "PATCH":
+            return [EsAdminEscolar()]
+        return [EsPadreOAdminEscolar()]
 
     @extend_schema(tags=["Instituciones"], request=None, responses=InstitucionSerializer)
     def get(self, request):
@@ -115,8 +183,13 @@ class MiInstitucionView(APIView):
 
 
 class CursoListCreateView(APIView):
-    permission_classes = [EsAdminEscolar]
+    permission_classes = [EsPadreOAdminEscolar]
     serializer_class = CursoSerializer
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [EsAdminEscolar()]
+        return [EsPadreOAdminEscolar()]
 
     @extend_schema(tags=["Instituciones"], request=None, responses=CursoSerializer(many=True))
     def get(self, request):
@@ -173,8 +246,13 @@ class CursoDetailView(APIView):
 
 
 class PuertaListCreateView(APIView):
-    permission_classes = [EsAdminEscolar]
+    permission_classes = [EsPadreOAdminEscolar]
     serializer_class = PuertaSerializer
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [EsAdminEscolar()]
+        return [EsPadreOAdminEscolar()]
 
     @extend_schema(tags=["Instituciones"], request=None, responses=PuertaSerializer(many=True))
     def get(self, request):

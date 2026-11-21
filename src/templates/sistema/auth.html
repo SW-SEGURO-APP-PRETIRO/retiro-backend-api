@@ -1,0 +1,19 @@
+{% extends 'sistema/base.html' %}{% load static %}
+{% block body %}
+<main id="main" class="auth-layout">
+  <section class="auth-story"><a class="brand" href="/sistema/autenticacion/ingresar/"><img src="{% static 'sistema/mark.svg' %}" alt="" width="34" height="38"><span>Retiro Seguro<small>Administración del sistema</small></span></a><div class="story-content"><p class="eyebrow">Gobernanza de plataforma</p><h2>Supervisión global,<br>integridad verificable.</h2><p>Instituciones, administradores escolares, cuentas globales y bitácora técnica inmutable en un solo panel.</p><div class="school-graphic" aria-hidden="true"><div class="school-roof"></div><div class="school-building"><span></span><span></span><span></span><span></span><i></i></div><div class="school-path"></div><div class="school-tree"></div><div class="school-tree second"></div></div></div><small>El administrador del sistema gobierna la plataforma; no opera retiros ni estudiantes.</small></section>
+  <section class="auth-form-wrap"><div class="auth-form"><p class="eyebrow">Consola del Administrador del Sistema</p><h1>{{ title }}</h1><p class="muted">{% if mode == 'ingresar' %}Ingresa exclusivamente con tu cuenta de Administrador del Sistema.{% elif mode == 'recuperar' %}Indica el correo asociado a tu cuenta administrativa.{% else %}Usa al menos 10 caracteres, mayúscula, minúscula, número y símbolo.{% endif %}</p>
+  <form id="auth-form">{% csrf_token %}
+    {% if mode == 'ingresar' or mode == 'recuperar' %}<label>Correo electrónico<input type="email" name="correo" autocomplete="username" placeholder="admin.sistema@retiroseguro.test" required maxlength="254"></label>{% endif %}
+    {% if mode == 'ingresar' or mode == 'cambiar-contrasena' %}<label>{% if mode == 'ingresar' %}Contraseña{% else %}Contraseña actual{% endif %}<input type="password" name="{% if mode == 'ingresar' %}contrasena{% else %}contrasena_actual{% endif %}" autocomplete="current-password" required></label>{% endif %}
+    {% if mode == 'ingresar' %}<label>Código de verificación <span class="optional">si tu cuenta usa segundo factor</span><input name="codigo_totp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000"></label>{% endif %}
+    {% if mode == 'restablecer' %}<label>Token de recuperación<input name="token" autocomplete="off" required></label>{% endif %}
+    {% if mode == 'restablecer' or mode == 'cambiar-contrasena' %}<label>Nueva contraseña<input type="password" name="nueva_contrasena" autocomplete="new-password" minlength="10" required></label><label>Confirma la nueva contraseña<input type="password" name="confirmacion" autocomplete="new-password" minlength="10" required></label>{% endif %}
+    <div id="auth-error" class="error-box" role="alert" hidden></div><div id="auth-message" role="status" class="success-box" hidden></div>
+    <button class="button primary" type="submit">{% if mode == 'ingresar' %}Entrar al panel del sistema <span aria-hidden="true">→</span>{% elif mode == 'recuperar' %}Solicitar recuperación{% else %}Actualizar contraseña{% endif %}</button>
+  </form>
+  {% if mode == 'ingresar' %}<a class="auth-link" href="/sistema/autenticacion/recuperar/">¿Olvidaste tu contraseña?</a><a class="auth-link muted" href="/autenticacion/ingresar/">Ir al portal de Administración Escolar →</a>{% else %}<a class="auth-link" href="/sistema/autenticacion/ingresar/">Volver al inicio de sesión del sistema</a>{% endif %}
+  <p class="auth-note">Acceso restringido a cuentas con rol ADMIN_SISTEMA. Todo intento de acceso queda encadenado en la bitácora técnica.</p></div></section>
+</main>
+{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'sistema/auth.js' %}"></script>{% endblock %}

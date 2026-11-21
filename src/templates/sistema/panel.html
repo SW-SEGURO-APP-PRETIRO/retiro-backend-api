@@ -1,0 +1,31 @@
+{% extends 'sistema/base.html' %}{% load static %}
+{% block body %}
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar" aria-label="Navegación del sistema">
+    <a class="brand" href="/sistema/"><img src="{% static 'sistema/mark.svg' %}" alt="" width="30" height="34"><span>Retiro Seguro<small>Administración del sistema</small></span></a>
+    <div class="workspace"><span class="workspace-icon" data-icon="shield"></span><div><strong id="platform-name">Plataforma global</strong><small>Gobernanza y seguridad</small></div></div>
+    <nav aria-label="Principal">
+      {% for key, label, icon, description in navigation %}
+      {% if key == 'instituciones' %}<p class="nav-label">Instituciones</p>{% endif %}
+      {% if key == 'administradores' %}<p class="nav-label">Cuentas y accesos</p>{% endif %}
+      {% if key == 'bitacora' %}<p class="nav-label">Auditoría y alertas</p>{% endif %}
+      <a href="/sistema/{% if key != 'inicio' %}{{ key }}/{% endif %}" {% if page == key %}aria-current="page"{% endif %}><span data-icon="{{ icon }}"></span>{{ label }}{% if key == 'pendientes' %}<span class="nav-count" id="pending-count" hidden></span>{% endif %}</a>
+      {% endfor %}
+    </nav>
+    <div class="sidebar-bottom"><span class="avatar">{{ request.user.nombres|slice:':1' }}{{ request.user.apellidos|slice:':1' }}</span><div><strong>{{ request.user.nombres }} {{ request.user.apellidos }}</strong><small>Administrador del sistema</small></div><button class="icon-button" id="logout" aria-label="Cerrar sesión" title="Cerrar sesión"><span data-icon="logout"></span></button></div>
+  </aside>
+  <div class="work-area">
+    <header class="topbar"><button class="icon-button mobile-menu" aria-label="Abrir menú" aria-expanded="false" aria-controls="sidebar" id="menu-toggle"><span data-icon="menu"></span></button><div class="breadcrumb">Administración del sistema <span>/</span> <strong>{{ title }}</strong></div><div class="top-actions"><span class="connection" id="connection">Conectando avisos</span><a href="/sistema/notificaciones/" class="icon-button" aria-label="Ver notificaciones"><span data-icon="bell"></span><span id="unread-dot" class="notification-dot" hidden></span></a></div></header>
+    <main id="main" class="sheet" tabindex="-1">
+      <div class="page-header"><div><h1>{{ title }}</h1><p>{{ description }}</p></div><div id="page-actions" class="actions"></div></div>
+      <div id="page-error" class="error-box" role="alert" hidden></div>
+      <div id="content" aria-live="polite" aria-busy="true"><div class="loading">Cargando información de la plataforma…</div></div>
+      <footer class="page-footer"><span>Retiro Seguro · Gobernanza global</span><span>El administrador del sistema supervisa la plataforma; no opera estudiantes ni retiros escolares</span></footer>
+    </main>
+  </div>
+</div>
+<dialog id="reason-dialog" aria-labelledby="reason-title"><form id="reason-form"><div class="dialog-header"><div><p class="eyebrow">Control de plataforma</p><h2 id="reason-title"></h2></div><button type="button" class="icon-button" data-close aria-label="Cerrar formulario">×</button></div><p id="reason-description" class="muted"></p><div class="form-grid" style="grid-template-columns:1fr"><label for="reason-input"><span id="reason-label">Motivo</span><input id="reason-input" name="motivo" maxlength="255" placeholder="Indica la razón de esta decisión"></label></div><div id="reason-error" class="error-box" role="alert" hidden></div><div class="dialog-footer"><button type="button" class="button" data-close>Cancelar</button><button type="submit" class="button primary" id="reason-button">Confirmar</button></div></form></dialog>
+<dialog id="confirmation" aria-labelledby="confirm-title"><form id="confirm-form"><h2 id="confirm-title"></h2><p id="confirm-description"></p><div class="error-box" id="confirm-error" role="alert" hidden></div><div class="dialog-footer"><button type="button" class="button" data-close>Cancelar</button><button type="submit" class="button primary" id="confirm-button">Confirmar</button></div></form></dialog>
+<dialog id="detail" aria-labelledby="detail-title"><div class="dialog-header"><h2 id="detail-title"></h2><button class="icon-button" data-close aria-label="Cerrar detalle">×</button></div><div id="detail-body"></div><div class="dialog-footer"><button class="button" data-close>Cerrar</button></div></dialog>
+{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'sistema/panel.js' %}"></script>{% endblock %}

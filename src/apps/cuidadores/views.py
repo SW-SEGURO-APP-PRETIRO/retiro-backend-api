@@ -50,12 +50,6 @@ class CuidadorListCreateView(APIView):
     permission_classes = [EsPadreOAdminEscolar]
     serializer_class = CuidadorSerializer
 
-    def get_permissions(self):
-        # Listar es exclusivo del ADMIN_ESCOLAR; registrar lo pueden hacer PADRE y ADMIN_ESCOLAR
-        if self.request.method == "GET":
-            return [EsAdminEscolar()]
-        return super().get_permissions()
-
     @extend_schema(
         tags=TAG,
         summary="Listar cuidadores de la institución",
@@ -107,7 +101,7 @@ class SolicitarAutorizacionView(APIView):
 
 
 class AutorizacionListView(APIView):
-    permission_classes = [EsAdminEscolar]
+    permission_classes = [EsPadreOAdminEscolar]
     serializer_class = AutorizacionSerializer
 
     @extend_schema(

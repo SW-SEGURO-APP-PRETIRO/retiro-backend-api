@@ -123,6 +123,12 @@ class NotificacionesConsumer(AsyncJsonWebsocketConsumer):
             {"evento": event["evento"], "subevento": event.get("subevento", ""), "notificacion": copia}
         )
 
+    async def chat_mensaje(self, event):
+        """Reenvía mensajes de chat en tiempo real a los miembros de la sala."""
+        await self.send_json(
+            {"evento": event.get("evento", "chat.mensaje"), "mensaje": event.get("mensaje", {})}
+        )
+
     # ------------------------------------------------------------------------- auxiliares
     async def _error(self, codigo, **extra):
         await self.send_json({"evento": "error", "codigo": codigo, **extra})

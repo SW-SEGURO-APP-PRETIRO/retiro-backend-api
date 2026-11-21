@@ -3,6 +3,14 @@ import assert from "node:assert/strict";
 import { catalog } from "../src/static/escolar/catalog.js";
 import { escapeHTML, rows, api, ApiError } from "../src/static/escolar/api.js";
 import { formData, human } from "../src/static/escolar/ui.js";
+import {
+  systemCatalog,
+  verifyAuditChain,
+} from "../src/static/sistema/catalog.js";
+import {
+  human as systemHuman,
+  badge as systemBadge,
+} from "../src/static/sistema/ui.js";
 
 test("un estudiante nuevo tiene estado válido sin selección adicional", () => {
   assert.equal(catalog.estudiantes.defaults.estado, "ACTIVO");
@@ -96,3 +104,44 @@ test("un login inválido muestra el error sin redirigir ni vaciar el formulario"
   );
   assert.equal(redirected, false);
 });
+
+test("el catálogo del administrador del sistema no incluye operaciones escolares", () => {
+  assert.equal("estudiantes" in systemCatalog, false);
+  assert.equal("cuidadores" in systemCatalog, false);
+  assert.equal("asignaciones" in systemCatalog, false);
+  assert.equal("cursos" in systemCatalog, false);
+  assert.equal("puertas" in systemCatalog, false);
+  assert.equal(systemCatalog.instituciones.endpoint, "instituciones/");
+  assert.equal(systemCatalog.pendientes.endpoint, "instituciones/pendientes/");
+  assert.equal(systemCatalog.bitacora.endpoint, "auditoria/tecnica/");
+});
+
+test("verifyAuditChain detecta cadenas SHA-256 íntegras y rupturas de secuencia o hash", () => {
+  const genesis = "0".repeat(64);
+  const hash1 = "a".repeat(64);
+  const hash2 = "b".repeat(64);
+
+  const okReport = verifyAuditChain([
+    { institucion_id: 0, secuencia: 1, hash_anterior: genesis, hash_propio: hash1 },
+    { institucion_id: 0, secuencia: 2, hash_anterior: hash1, hash_propio: hash2 },
+  ]);
+  assert.equal(okReport.intact, true);
+  assert.equal(okReport.chains[0].status, "INTEGRA");
+
+  const brokenReport = verifyAuditChain([
+    { institucion_id: 0, secuencia: 1, hash_anterior: genesis, hash_propio: hash1 },
+    { institucion_id: 0, secuencia: 2, hash_anterior: "c".repeat(64), hash_propio: hash2 },
+  ]);
+  assert.equal(brokenReport.intact, false);
+  assert.equal(brokenReport.chains[0].status, "INCONSISTENTE");
+  assert.equal(brokenReport.anomalies.length, 1);
+});
+
+test("las etiquetas y estados del sistema se formatean en lenguaje humano", () => {
+  assert.equal(systemHuman("PENDIENTE_APROBACION"), "Pendiente de aprobación");
+  assert.equal(systemHuman("INSTITUCION_SUSPENDIDA"), "Institución suspendida");
+  assert.equal(systemHuman("INSTITUCION_REACTIVADA"), "Institución reactivada");
+  assert.match(systemBadge("INTEGRA"), /badge good/);
+  assert.match(systemBadge("INCONSISTENTE"), /badge bad/);
+});
+

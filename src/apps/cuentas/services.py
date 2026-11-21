@@ -135,7 +135,11 @@ def cambiar_estado_usuario(actor, usuario, estado):
         "USUARIO_BLOQUEADO" if estado == Usuario.Estado.BLOQUEADA else "USUARIO_DESBLOQUEADO",
         "EXITO",
         {"usuario_id": usuario.pk},
-        categoria=EventoAuditoria.Categoria.OPERATIVA,
+        categoria=(
+            EventoAuditoria.Categoria.TECNICA
+            if getattr(actor, "rol", None) == Rol.ADMIN_SISTEMA
+            else EventoAuditoria.Categoria.OPERATIVA
+        ),
     )
     return usuario
 

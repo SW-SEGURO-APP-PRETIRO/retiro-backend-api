@@ -24,7 +24,7 @@ def test_anonimo_no_ve_panel(client):
     assert "/autenticacion/ingresar/" in response.url
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("pantalla", ["", "estudiantes/", "padres/", "guardias/", "asignaciones/", "cuidadores/", "cursos/", "puertas/", "institucion/", "bitacora/", "notificaciones/"])
+@pytest.mark.parametrize("pantalla", ["", "estudiantes/", "padres/", "guardias/", "asignaciones/", "cuidadores/", "cursos/", "puertas/", "chat/", "institucion/", "bitacora/", "notificaciones/"])
 def test_pantallas_escolares(client, admin, pantalla):
     client.force_login(admin)
     response = client.get("/escolar/" + pantalla)
@@ -33,10 +33,28 @@ def test_pantallas_escolares(client, admin, pantalla):
     assert "no-store" in response.headers["Cache-Control"]
 
 @pytest.mark.django_db
-def test_otro_rol_no_ve_panel(client, admin):
-    Usuario.objects.filter(pk=admin.pk).update(rol="PADRE")
+def test_otro_rol_no_autorizado_no_ve_panel(client, admin):
+    Usuario.objects.filter(pk=admin.pk).update(rol="GUARDIA")
     client.force_login(Usuario.objects.get(pk=admin.pk))
     assert client.get("/escolar/").status_code == 403
+
+
+@pytest.mark.django_db
+def test_padre_ve_sus_pantallas_y_no_las_exclusivas_de_admin_escolar(client, colegio):
+    padre = Usuario.objects.create(
+        correo="padre.portal@example.test",
+        cedula="1700000010",
+        nombres="Carlos",
+        apellidos="Representante",
+        rol="PADRE",
+        institucion_id=colegio.pk,
+        estado="ACTIVA",
+    )
+    client.force_login(padre)
+    for permitida in ["", "estudiantes/", "cuidadores/", "chat/", "notificaciones/", "institucion/"]:
+        assert client.get("/escolar/" + permitida).status_code == 200
+    for denegada in ["padres/", "guardias/", "asignaciones/", "cursos/", "puertas/", "bitacora/"]:
+        assert client.get("/escolar/" + denegada).status_code == 403
 
 @pytest.mark.django_db
 def test_clave_temporal_redirige(client, admin):
@@ -180,3 +198,209 @@ def test_admin_escolar_puede_rechazar_solicitud_pendiente(client, admin, colegio
     assert autorizacion.estado == "RECHAZADO"
     assert autorizacion.rechazada_por_id == admin.pk
     assert autorizacion.motivo_rechazo == "La identidad no coincide con el registro."
+
+
+@pytest.fixture
+def admin_sistema(db):
+    return Usuario.objects.create(
+        correo="admin.sistema@example.test",
+        cedula="1700000099",
+        nombres="Admin",
+        apellidos="Sistema",
+        rol="ADMIN_SISTEMA",
+        institucion_id=None,
+        estado="ACTIVA",
+    )
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "pantalla",
+    [
+        "",
+        "instituciones/",
+        "pendientes/",
+        "administradores/",
+        "cuentas/",
+        "seguridad/",
+        "bitacora/",
+        "integridad/",
+        "chat/",
+        "notificaciones/",
+    ],
+)
+def test_pantallas_admin_sistema(client, admin_sistema, pantalla):
+    client.force_login(admin_sistema)
+    response = client.get("/sistema/" + pantalla)
+    assert response.status_code == 200
+    assert b"Administraci\xc3\xb3n del sistema" in response.content
+    assert "no-store" in response.headers["Cache-Control"]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "modo",
+    ["ingresar/", "recuperar/", "restablecer/"],
+)
+def test_login_publico_admin_sistema_emite_csrf(client, modo):
+    response = client.get("/sistema/autenticacion/" + modo)
+    assert response.status_code == 200
+    assert "csrftoken" in response.cookies
+    assert b"Administraci\xc3\xb3n del sistema" in response.content
+
+
+def test_anonimo_no_ve_panel_sistema(client):
+    response = client.get("/sistema/")
+    assert response.status_code == 302
+    assert "/sistema/autenticacion/ingresar/" in response.url
+
+
+@pytest.mark.django_db
+def test_clave_temporal_admin_sistema_redirige_a_su_propio_cambio(client, admin_sistema):
+    admin_sistema.contrasena_temporal = True
+    admin_sistema.save()
+    client.force_login(admin_sistema)
+    assert client.get("/sistema/").url == "/sistema/autenticacion/cambiar-contrasena/"
+
+
+@pytest.mark.django_db
+def test_admin_escolar_no_ve_panel_sistema_y_viceversa(client, admin, admin_sistema):
+    client.force_login(admin)
+    assert client.get("/sistema/").status_code == 403
+    client.force_login(admin_sistema)
+    assert client.get("/escolar/").status_code == 403
+    assert client.get("/").status_code == 403
+
+
+
+@pytest.mark.django_db
+def test_admin_sistema_no_opera_entidades_escolares(client, admin_sistema, colegio):
+    client.force_login(admin_sistema)
+    assert client.get("/api/v1/cuentas/estudiantes/").status_code == 403
+    assert client.get("/api/v1/cuentas/relaciones-padre-estudiante/").status_code == 403
+    assert client.get("/api/v1/instituciones/cursos/").status_code == 403
+    assert client.get("/api/v1/instituciones/puertas/").status_code == 403
+    assert client.get("/api/v1/cuidadores/autorizaciones/").status_code == 403
+
+
+@pytest.mark.django_db
+def test_admin_sistema_lista_aprueba_rechaza_suspende_y_reactiva_instituciones(
+    client, admin_sistema
+):
+    inst = Institucion.objects.create(
+        nombre="Colegio Pendiente",
+        ruc="1790000000019",
+        correo="pendiente@example.test",
+        direccion="Quito",
+        telefono="022000000",
+        responsable="Rector",
+        estado="PENDIENTE_APROBACION",
+    )
+    admin_col = Usuario.objects.create(
+        correo="rector@example.test",
+        cedula="1711000021",
+        nombres="Rector",
+        apellidos="Colegio",
+        rol="ADMIN_ESCOLAR",
+        institucion_id=inst.pk,
+        estado="PENDIENTE",
+    )
+    client.force_login(admin_sistema)
+
+    # Listar todas las instituciones
+    listado = client.get("/api/v1/instituciones/")
+    assert listado.status_code == 200
+    assert inst.pk in [i["id"] for i in listado.json()["datos"]]
+
+    # Rechazo sin motivo falla
+    sin_motivo = client.post(
+        f"/api/v1/instituciones/{inst.pk}/aprobar/",
+        {"aprobada": False, "motivo": ""},
+        content_type="application/json",
+    )
+    assert sin_motivo.status_code == 400
+
+    # Aprobar activa institución y su admin escolar
+    aprobar = client.post(
+        f"/api/v1/instituciones/{inst.pk}/aprobar/",
+        {"aprobada": True, "motivo": ""},
+        content_type="application/json",
+    )
+    assert aprobar.status_code == 200
+    inst.refresh_from_db()
+    admin_col.refresh_from_db()
+    assert inst.estado == "ACTIVA"
+    assert admin_col.estado == "ACTIVA"
+
+    # Suspender institución activa
+    suspender = client.post(
+        f"/api/v1/instituciones/{inst.pk}/suspender/",
+        {"motivo": "Mantenimiento de convenio"},
+        content_type="application/json",
+    )
+    assert suspender.status_code == 200
+    inst.refresh_from_db()
+    assert inst.estado == "SUSPENDIDA"
+    assert inst.motivo_estado == "Mantenimiento de convenio"
+
+    # Reactivar institución suspendida
+    reactivar = client.post(
+        f"/api/v1/instituciones/{inst.pk}/reactivar/",
+        {},
+        content_type="application/json",
+    )
+    assert reactivar.status_code == 200
+    inst.refresh_from_db()
+    assert inst.estado == "ACTIVA"
+    assert inst.motivo_estado == ""
+
+
+@pytest.mark.django_db
+def test_chat_salas_y_mensajes_en_panel_escolar_y_sistema(client, admin, admin_sistema, colegio):
+    padre = Usuario.objects.create(
+        correo="padre.chat@example.test",
+        cedula="1711000033",
+        nombres="Elena",
+        apellidos="Padre",
+        rol="PADRE",
+        institucion_id=colegio.pk,
+        estado="ACTIVA",
+    )
+
+    # Padre entra directamente a la sala general de su colegio y envía mensaje
+    client.force_login(padre)
+    general_padre = client.get("/api/v1/chat/general/")
+    assert general_padre.status_code == 200
+    sala_general_id = general_padre.json()["datos"]["sala"]["id"]
+
+    envio = client.post(
+        "/api/v1/chat/general/",
+        {"sala_id": sala_general_id, "contenido": "Buenos días, consulta sobre horario de retiro."},
+        content_type="application/json",
+    )
+    assert envio.status_code == 201
+
+    # Admin escolar lee el mensaje en la sala general y responde
+    client.force_login(admin)
+    mensajes_admin = client.get("/api/v1/chat/general/")
+    assert mensajes_admin.status_code == 200
+    assert mensajes_admin.json()["datos"]["mensajes"][0]["contenido"] == "Buenos días, consulta sobre horario de retiro."
+
+    resp_admin = client.post(
+        "/api/v1/chat/general/",
+        {"sala_id": sala_general_id, "contenido": "El horario normal es 13:00."},
+        content_type="application/json",
+    )
+    assert resp_admin.status_code == 201
+
+    # Admin sistema puede escribir en la sala general de la institución
+    client.force_login(admin_sistema)
+    msg_sys = client.post(
+        "/api/v1/chat/general/",
+        {"sala_id": sala_general_id, "contenido": "Notificación de soporte técnico."},
+        content_type="application/json",
+    )
+    assert msg_sys.status_code == 201
+
+
+

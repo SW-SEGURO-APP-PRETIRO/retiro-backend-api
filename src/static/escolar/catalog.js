@@ -180,6 +180,33 @@ export const catalog = {
     noEdit: true,
   },
 };
+export const caregiverApplicationFields = [
+  f("tipo", "Tipo de cuidador", "select", {
+    required: true,
+    options: [
+      ["FIJO", "Cuidador fijo (con cuenta y QR dinámico)"],
+      ["TEMPORAL", "Cuidador temporal (solo QR estático)"],
+    ],
+  }),
+  f("estudiante_id", "Hijo / estudiante a retirar", "select", {
+    source: "estudiantes",
+    required: true,
+    number: true,
+  }),
+  f("nombres", "Nombres del cuidador", "text", { required: true, max: 100 }),
+  f("apellidos", "Apellidos del cuidador", "text", { required: true, max: 100 }),
+  f("cedula", "Cédula del cuidador", "text", {
+    required: true,
+    pattern: "[0-9]{10}",
+    max: 10,
+  }),
+  f("correo", "Correo electrónico", "email", {
+    max: 254,
+    help: "Obligatorio para cuidador fijo (recibirá sus credenciales por correo).",
+  }),
+  f("telefono", "Teléfono", "tel", { max: 20 }),
+];
+
 export const institutionFields = [
   f("nombre", "Nombre de la institución", "text", { required: true, max: 200 }),
   f("ruc", "RUC", "text", { required: true, pattern: "[0-9]{13}", max: 13 }),

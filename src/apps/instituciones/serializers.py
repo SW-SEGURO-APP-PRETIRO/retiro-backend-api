@@ -68,6 +68,11 @@ class DecisionInstitucionSerializer(serializers.Serializer):
         return attrs
 
 
+class MotivoEstadoInstitucionSerializer(serializers.Serializer):
+    motivo = serializers.CharField(required=False, allow_blank=True, max_length=255)
+
+
+
 class CursoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Curso

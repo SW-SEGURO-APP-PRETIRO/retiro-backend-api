@@ -94,6 +94,41 @@ def decidir_institucion(institucion, admin_sistema, aprobada, motivo):
     return institucion
 
 
+def suspender_institucion(institucion, admin_sistema, motivo=""):
+    from apps.autenticacion.services import _registrar_auditoria
+
+    if institucion.estado != Institucion.Estado.ACTIVA:
+        raise ValueError("Solo se pueden suspender instituciones activas.")
+    institucion.estado = Institucion.Estado.SUSPENDIDA
+    institucion.motivo_estado = (motivo or "").strip()
+    institucion.save(update_fields=["estado", "motivo_estado"])
+    _registrar_auditoria(
+        admin_sistema,
+        "INSTITUCION_SUSPENDIDA",
+        "EXITO",
+        {"institucion_id": institucion.pk, "motivo": institucion.motivo_estado},
+    )
+    return institucion
+
+
+def reactivar_institucion(institucion, admin_sistema):
+    from apps.autenticacion.services import _registrar_auditoria
+
+    if institucion.estado != Institucion.Estado.SUSPENDIDA:
+        raise ValueError("Solo se pueden reactivar instituciones suspendidas.")
+    institucion.estado = Institucion.Estado.ACTIVA
+    institucion.motivo_estado = ""
+    institucion.save(update_fields=["estado", "motivo_estado"])
+    _registrar_auditoria(
+        admin_sistema,
+        "INSTITUCION_REACTIVADA",
+        "EXITO",
+        {"institucion_id": institucion.pk},
+    )
+    return institucion
+
+
+
 def guardar_curso(usuario, datos, curso=None):
     nombre = datos.get("nombre", curso.nombre if curso else None)
     qs = Curso._base_manager.filter(institucion_id=usuario.institucion_id, nombre=nombre)

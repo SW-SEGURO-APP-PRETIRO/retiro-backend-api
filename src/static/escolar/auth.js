@@ -37,10 +37,10 @@ form.addEventListener("submit", async (event) => {
       body: data,
     });
     if (mode === "ingresar") {
-      if (result.datos.usuario.rol !== "ADMIN_ESCOLAR") {
+      if (!["ADMIN_ESCOLAR", "PADRE"].includes(result.datos.usuario.rol)) {
         await api("autenticacion/cerrar-sesion/", { method: "POST" });
         throw new Error(
-          "Este acceso es exclusivo para administradores escolares.",
+          "Este acceso es exclusivo para administradores escolares y padres o representantes.",
         );
       }
       location.assign(
