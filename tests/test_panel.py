@@ -16,7 +16,31 @@ def test_login_publico_emite_csrf(client):
     response = client.get("/autenticacion/ingresar/")
     assert response.status_code == 200
     assert "csrftoken" in response.cookies
-    assert b"codigo_totp" in response.content
+
+
+@pytest.mark.django_db
+def test_recuperacion_envia_correo_sin_exponer_token(client, admin, monkeypatch):
+    enviados = []
+
+    def enviar_correo(**kwargs):
+        enviados.append(kwargs)
+        return 1
+
+    monkeypatch.setattr(
+        "apps.autenticacion.services.send_mail",
+        enviar_correo,
+    )
+
+    response = client.post(
+        "/api/v1/autenticacion/solicitar-recuperacion/",
+        {"correo": admin.correo},
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    assert "token" not in response.json()["datos"]
+    assert len(enviados) == 1
+    assert enviados[0]["recipient_list"] == [admin.correo]
 
 
 @pytest.mark.django_db

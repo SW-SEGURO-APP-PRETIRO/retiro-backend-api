@@ -8,6 +8,7 @@ import pyotp
 from cryptography.fernet import Fernet, InvalidToken
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
+from django.core.mail import send_mail
 from django.db import transaction
 from django.utils import timezone
 
@@ -137,19 +138,20 @@ def autenticar(request, correo, contrasena):
                 _notificar_bloqueo_de_cuenta(user)
         return None, "Credenciales inválidas."
 
-    codigo_totp = request.data.get("codigo_totp", "")
-    if autenticado.totp_secreto_cifrado:
-        if not codigo_totp:
-            return None, "La cuenta requiere un código TOTP."
-        try:
-            secreto = Fernet(settings.FIELD_ENCRYPTION_KEY.encode("utf-8")).decrypt(
-                autenticado.totp_secreto_cifrado.encode("utf-8")
-            ).decode("utf-8")
-        except (InvalidToken, ValueError):
-            return None, "No se pudo validar la configuración TOTP."
-        if not pyotp.TOTP(secreto).verify(codigo_totp):
-            _registrar_auditoria(autenticado, "INTENTO_TOTP_FALLIDO", "FALLO", {})
-            return None, "El código TOTP no es válido."
+    # TOTP/2FA reservado para el 2.º bimestre. El 1.er bimestre usa solo correo y contraseña.
+    # codigo_totp = request.data.get("codigo_totp", "")
+    # if autenticado.totp_secreto_cifrado:
+    #     if not codigo_totp:
+    #         return None, "La cuenta requiere un código TOTP."
+    #     try:
+    #         secreto = Fernet(settings.FIELD_ENCRYPTION_KEY.encode("utf-8")).decrypt(
+    #             autenticado.totp_secreto_cifrado.encode("utf-8")
+    #         ).decode("utf-8")
+    #     except (InvalidToken, ValueError):
+    #         return None, "No se pudo validar la configuración TOTP."
+    #     if not pyotp.TOTP(secreto).verify(codigo_totp):
+    #         _registrar_auditoria(autenticado, "INTENTO_TOTP_FALLIDO", "FALLO", {})
+    #         return None, "El código TOTP no es válido."
 
     login(request, autenticado)
     autenticado.intentos_fallidos = 0
@@ -182,13 +184,34 @@ def solicitar_recuperacion(correo):
     if not user:
         return None
     token = secrets.token_urlsafe(32)
-    TokenRecuperacion.objects.create(
+    registro = TokenRecuperacion.objects.create(
         usuario_id=user.pk,
         hash_token=hashlib.sha256(token.encode("utf-8")).hexdigest(),
         expira_en=timezone.now() + timedelta(minutes=30),
     )
     _registrar_auditoria(user, "SOLICITUD_RECUPERACION", "EXITO", {})
-    return token
+    enlace = f"https://localhost:8443/autenticacion/restablecer/?token={token}"
+    try:
+        send_mail(
+            subject="Recuperación de contraseña - Retiro Seguro",
+            message=(
+                f"Hola {user.nombres},\n\n"
+                "Solicitaste recuperar tu contraseña.\n"
+                f"Usa este enlace antes de 30 minutos:\n{enlace}\n\n"
+                "Si no solicitaste este cambio, ignora este correo."
+            ),
+            from_email=None,
+            recipient_list=[user.correo],
+            fail_silently=False,
+        )
+    except Exception:  # noqa: BLE001
+        registro.delete()
+        logging.getLogger(__name__).exception(
+            "No se pudo enviar el correo de recuperación para el usuario %s.",
+            user.pk,
+        )
+        return None
+    return None
 
 
 def confirmar_recuperacion(token, nueva_contrasena):

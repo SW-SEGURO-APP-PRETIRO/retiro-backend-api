@@ -6,7 +6,6 @@
   <form id="auth-form">{% csrf_token %}
     {% if mode == 'ingresar' or mode == 'recuperar' %}<label>Correo electrónico<input type="email" name="correo" autocomplete="username" placeholder="admin.sistema@retiroseguro.test" required maxlength="254"></label>{% endif %}
     {% if mode == 'ingresar' or mode == 'cambiar-contrasena' %}<label>{% if mode == 'ingresar' %}Contraseña{% else %}Contraseña actual{% endif %}<input type="password" name="{% if mode == 'ingresar' %}contrasena{% else %}contrasena_actual{% endif %}" autocomplete="current-password" required></label>{% endif %}
-    {% if mode == 'ingresar' %}<label>Código de verificación <span class="optional">si tu cuenta usa segundo factor</span><input name="codigo_totp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000"></label>{% endif %}
     {% if mode == 'restablecer' %}<label>Token de recuperación<input name="token" autocomplete="off" required></label>{% endif %}
     {% if mode == 'restablecer' or mode == 'cambiar-contrasena' %}<label>Nueva contraseña<input type="password" name="nueva_contrasena" autocomplete="new-password" minlength="10" required></label><label>Confirma la nueva contraseña<input type="password" name="confirmacion" autocomplete="new-password" minlength="10" required></label>{% endif %}
     <div id="auth-error" class="error-box" role="alert" hidden></div><div id="auth-message" role="status" class="success-box" hidden></div>

@@ -23,9 +23,9 @@ def prepare():
     from seed_demo import _cedula
     with sin_filtro():
         colegio = Institucion.objects.get(correo="administracion@ue-los-alisos.edu.ec")
-        admin = Usuario.objects.get(correo="maria.cardenas@ue-los-alisos.edu.ec")
-        admin_sistema = Usuario.objects.get(correo="admin.sistema@retiroseguro.test")
-        padre = Usuario.objects.get(correo="carolina.andrade@ejemplo.ec")
+        admin = Usuario.objects.get(correo=os.environ.get("DEMO_ADMIN_ESCOLAR_EMAIL", "maria.cardenas@ue-los-alisos.edu.ec"))
+        admin_sistema = Usuario.objects.get(correo=os.environ.get("DEMO_ADMIN_SISTEMA_EMAIL", "admin.sistema@retiroseguro.test"))
+        padre = Usuario.objects.get(correo=os.environ.get("DEMO_PADRE_EMAIL", "carolina.andrade@ejemplo.ec"))
         student = Estudiante.objects.filter(institucion_id=colegio.pk).first()
         cuidador, _ = Cuidador.objects.get_or_create(institucion_id=colegio.pk, cedula=_cedula("171600001"), defaults={"tipo":"FIJO", "nombres":"Lucía", "apellidos":"Mendoza Cevallos", "correo":"lucia.mendoza@ejemplo.ec", "telefono":"0990000000"})
         AutorizacionCuidador.objects.get_or_create(institucion_id=colegio.pk, cuidador=cuidador, estudiante_id=student.pk, defaults={"solicitada_por_id":padre.pk, "estado":"SOLICITADO", "solicitada_en":timezone.now(), "firma_hmac":"demo"})
@@ -66,11 +66,11 @@ def prepare():
             },
         )
     print("Vista previa con datos ficticios (Ingreso único en http://127.0.0.1:8000/autenticacion/ingresar/):")
-    print("  1. Admin Sistema (/sistema/) : admin.sistema@retiroseguro.test     | Clave: VistaEscolar#2026")
-    print("  2. Admin Escolar (/escolar/) : maria.cardenas@ue-los-alisos.edu.ec | Clave: VistaEscolar#2026")
-    print("  3. Padre Familia (/escolar/) : carolina.andrade@ejemplo.ec         | Clave: VistaEscolar#2026")
+    print(f"  1. Admin Sistema (/sistema/) : {os.environ.get('DEMO_ADMIN_SISTEMA_EMAIL', 'admin.sistema@retiroseguro.test'):<36} | Clave: VistaEscolar#2026")
+    print(f"  2. Admin Escolar (/escolar/) : {os.environ.get('DEMO_ADMIN_ESCOLAR_EMAIL', 'maria.cardenas@ue-los-alisos.edu.ec'):<36} | Clave: VistaEscolar#2026")
+    print(f"  3. Padre Familia (/escolar/) : {os.environ.get('DEMO_PADRE_EMAIL', 'carolina.andrade@ejemplo.ec'):<36} | Clave: VistaEscolar#2026")
     print("  4. Guardia       (/escolar/) : jorge.herrera@ue-los-alisos.edu.ec  | Clave: VistaEscolar#2026")
-    print("  5. Cuidador Fijo (/escolar/) : ricardo.zambrano@ue-los-alisos.edu.ec | Clave: VistaEscolar#2026")
+    print("  5. Cuidador Fijo (/escolar/) : se registra desde el endpoint móvil")
 
 if __name__ == "__main__":
     prepare()

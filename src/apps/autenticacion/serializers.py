@@ -4,6 +4,7 @@ from rest_framework import serializers
 class IngresoSerializer(serializers.Serializer):
     correo = serializers.EmailField()
     contrasena = serializers.CharField(write_only=True, trim_whitespace=False)
+    # TOTP reservado para el 2.º bimestre; no forma parte del login del alcance actual.
     codigo_totp = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
 

@@ -57,7 +57,12 @@ def sembrar(clave: str | None = None) -> dict:
     resumen = {}
 
     def usuario(correo, rol, inst, n, nombres, apellidos, **extra):
-        u = Usuario.objects.filter(correo=correo).first()
+        if inst is None:
+            u = Usuario.objects.filter(rol=rol).first()
+        else:
+            u = Usuario.objects.filter(institucion_id=inst.id, rol=rol).first()
+        if u is None:
+            u = Usuario.objects.filter(correo__iexact=correo).first()
         if u is None:
             u = Usuario.objects.crear_usuario(
                 correo, clave,
@@ -66,6 +71,22 @@ def sembrar(clave: str | None = None) -> dict:
                 institucion_id=inst.id if inst else None,
                 estado=Usuario.Estado.ACTIVA, **extra,
             )
+        else:
+            conflicto = Usuario.objects.filter(correo__iexact=correo).exclude(pk=u.pk).first()
+            if conflicto is not None:
+                conflicto.correo = (
+                    f"liberada-{conflicto.pk}-{inst.id if inst else 'sistema'}"
+                    f"-{conflicto.rol.lower()}@ejemplo.test"
+                )
+                conflicto.save(update_fields=["correo"])
+            u.correo = correo
+            u.nombres = nombres
+            u.apellidos = apellidos
+            u.estado = Usuario.Estado.ACTIVA
+            u.set_password(clave)
+            for campo, valor in extra.items():
+                setattr(u, campo, valor)
+            u.save()
         resumen[correo] = rol
         return u
 
@@ -79,7 +100,11 @@ def sembrar(clave: str | None = None) -> dict:
         )
 
     with sin_filtro():  # proceso interno: la semilla escribe en varias instituciones
-        usuario("admin.sistema@retiroseguro.test", Rol.ADMIN_SISTEMA, None, 1, "Admin", "Sistema")
+        admin_sistema_correo = os.environ.get(
+            "DEMO_ADMIN_SISTEMA_EMAIL",
+            "admin.sistema@retiroseguro.test",
+        )
+        usuario(admin_sistema_correo, Rol.ADMIN_SISTEMA, None, 1, "Admin", "Sistema")
 
         instituciones = (
             {
@@ -89,10 +114,18 @@ def sembrar(clave: str | None = None) -> dict:
                 "direccion": "Av. Los Shyris N35-120 y Suecia, Quito",
                 "telefono": "022601420",
                 "responsable": "Lic. María Fernanda Cárdenas",
-                "admin": ("maria.cardenas@ue-los-alisos.edu.ec", "María Fernanda", "Cárdenas"),
-                "padre": ("carolina.andrade@ejemplo.ec", "Carolina Isabel", "Andrade López"),
+                "admin": (
+                    os.environ.get("DEMO_ADMIN_ESCOLAR_EMAIL", "maria.cardenas@ue-los-alisos.edu.ec"),
+                    "María Fernanda",
+                    "Cárdenas",
+                ),
+                "padre": (
+                    os.environ.get("DEMO_PADRE_EMAIL", "carolina.andrade@ejemplo.ec"),
+                    "Carolina Isabel",
+                    "Andrade López",
+                ),
                 "guardia": ("jorge.herrera@ue-los-alisos.edu.ec", "Jorge Luis", "Herrera"),
-                "cuidador": ("ricardo.zambrano@ue-los-alisos.edu.ec", "Ricardo Javier", "Zambrano"),
+                "crear_cuidador_fijo": False,
                 "cursos": (
                     ("Segundo de Básica A", time(13, 0)),
                     ("Cuarto de Básica A", time(13, 30)),
@@ -115,6 +148,7 @@ def sembrar(clave: str | None = None) -> dict:
                 "padre": ("diego.loor@ejemplo.ec", "Diego Fernando", "Loor"),
                 "guardia": ("luis.velez@colegio-nuevo-mundo.edu.ec", "Luis Fernando", "Vélez"),
                 "cuidador": ("gabriela.munoz@colegio-nuevo-mundo.edu.ec", "Gabriela Carolina", "Muñoz"),
+                "crear_cuidador_fijo": True,
                 "cursos": (
                     ("Primero de Básica B", time(12, 30)),
                     ("Tercero de Básica B", time(13, 0)),
@@ -129,14 +163,26 @@ def sembrar(clave: str | None = None) -> dict:
         )
 
         for i, datos in enumerate(instituciones, start=1):
-            inst, _ = Institucion.objects.get_or_create(
-                correo=datos["correo"],
-                defaults=dict(
-                    nombre=datos["nombre"], ruc=_ruc(datos["ruc_base"]), direccion=datos["direccion"],
-                    telefono=datos["telefono"], responsable=datos["responsable"],
-                    estado=Institucion.Estado.ACTIVA, aprobada_en=timezone.now(),
-                ),
-            )
+            inst = Institucion.objects.filter(nombre=datos["nombre"]).first()
+            if inst is None:
+                inst = Institucion.objects.create(
+                    nombre=datos["nombre"],
+                    ruc=_ruc(datos["ruc_base"]),
+                    direccion=datos["direccion"],
+                    telefono=datos["telefono"],
+                    correo=datos["correo"],
+                    responsable=datos["responsable"],
+                    estado=Institucion.Estado.ACTIVA,
+                    aprobada_en=timezone.now(),
+                )
+            else:
+                inst.correo = datos["correo"]
+                inst.direccion = datos["direccion"]
+                inst.telefono = datos["telefono"]
+                inst.responsable = datos["responsable"]
+                inst.estado = Institucion.Estado.ACTIVA
+                inst.aprobada_en = timezone.now()
+                inst.save()
             puerta, puerta_creada = Puerta.objects.get_or_create(institucion_id=inst.id, nombre="Puerta principal")
             cursos = []
 
@@ -168,40 +214,49 @@ def sembrar(clave: str | None = None) -> dict:
                 telefono="0991234567",
                 puerta_id=puerta.id,
             )
-            cuidador_correo, cuidador_nombres, cuidador_apellidos = datos["cuidador"]
-            cuidador_usuario = usuario(
-                cuidador_correo,
-                Rol.CUIDADOR_FIJO,
-                inst,
-                4,
-                cuidador_nombres,
-                cuidador_apellidos,
-                telefono="0987654321",
-            )
-
             if puerta_creada:
                 registrar(admin, "PUERTA_CREADA", {"puerta_id": puerta.pk, "nombre": puerta.nombre})
 
-            cuidador = Cuidador._base_manager.filter(
-                institucion_id=inst.id,
-                cedula=_cedula(f"17{inst.id}20{inst.id:02d}00"),
-            ).first()
-            if cuidador is None:
-                cuidador = Cuidador.objects.create(
-                    institucion_id=inst.id,
-                    tipo=Cuidador.Tipo.FIJO,
-                    usuario_id=cuidador_usuario.pk,
-                    cedula=_cedula(f"17{inst.id}20{inst.id:02d}00"),
+            cuidador = None
+            if datos.get("crear_cuidador_fijo"):
+                cuidador_correo, cuidador_nombres, cuidador_apellidos = datos["cuidador"]
+                cuidador_usuario = usuario(
+                    cuidador_correo,
+                    Rol.CUIDADOR_FIJO,
+                    inst,
+                    4,
                     nombres=cuidador_nombres,
                     apellidos=cuidador_apellidos,
                     telefono="0987654321",
-                    correo=cuidador_correo,
                 )
-                registrar(
-                    admin,
-                    "CUIDADOR_CREADO",
-                    {"cuidador_id": cuidador.pk, "tipo": cuidador.tipo},
-                )
+                cuidador = Cuidador._base_manager.filter(
+                    institucion_id=inst.id,
+                    cedula=_cedula(f"17{inst.id}20{inst.id:02d}00"),
+                ).first()
+                if cuidador is None:
+                    cuidador = Cuidador.objects.create(
+                        institucion_id=inst.id,
+                        tipo=Cuidador.Tipo.FIJO,
+                        usuario_id=cuidador_usuario.pk,
+                        cedula=_cedula(f"17{inst.id}20{inst.id:02d}00"),
+                        nombres=cuidador_nombres,
+                        apellidos=cuidador_apellidos,
+                        telefono="0987654321",
+                        correo=cuidador_correo,
+                    )
+                    registrar(
+                        admin,
+                        "CUIDADOR_CREADO",
+                        {"cuidador_id": cuidador.pk, "tipo": cuidador.tipo},
+                    )
+                else:
+                    cuidador.tipo = Cuidador.Tipo.FIJO
+                    cuidador.usuario_id = cuidador_usuario.pk
+                    cuidador.nombres = cuidador_nombres
+                    cuidador.apellidos = cuidador_apellidos
+                    cuidador.telefono = "0987654321"
+                    cuidador.correo = cuidador_correo
+                    cuidador.save()
 
             temporal_cedula = _cedula(f"17{inst.id}30{inst.id:02d}00")
             temporal = Cuidador._base_manager.filter(
@@ -257,7 +312,7 @@ def sembrar(clave: str | None = None) -> dict:
                     )
 
             primer_estudiante = Estudiante.objects.filter(institucion_id=inst.id).order_by("id").first()
-            if primer_estudiante:
+            if primer_estudiante and cuidador is not None:
                 autorizacion, creada = AutorizacionCuidador.objects.get_or_create(
                     institucion_id=inst.id,
                     cuidador=cuidador,

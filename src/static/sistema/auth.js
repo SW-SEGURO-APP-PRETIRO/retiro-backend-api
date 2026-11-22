@@ -67,7 +67,7 @@ form.addEventListener("submit", async (event) => {
   } catch (error) {
     errorBox.textContent =
       mode === "ingresar" && error.status === 401
-        ? "No se pudo iniciar sesión. Revisa tus credenciales y el código de verificación."
+        ? "No se pudo iniciar sesión. Revisa tus credenciales."
         : errorText(error);
     errorBox.hidden = false;
   } finally {

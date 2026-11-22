@@ -102,8 +102,8 @@ class SolicitarRecuperacionView(APIView):
     def post(self, request):
         serializer = SolicitudRecuperacionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        token = solicitar_recuperacion(serializer.validated_data["correo"])
-        datos = {"token": token} if token else {}
+        solicitar_recuperacion(serializer.validated_data["correo"])
+        datos = {}
         return Response(
             {"datos": datos, "mensaje": "Si el correo existe, se generó un enlace de recuperación."}
         )
