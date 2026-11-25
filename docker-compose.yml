@@ -5,10 +5,9 @@ services:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
       MSSQL_PID: Developer
-    # La BD NO se publica al host por defecto. Para conectar SSMS/DBeaver
-    # descomenta el puerto (solo en tu máquina, nunca en un servidor):
-      #ports:
-        #- "127.0.0.1:1433:1433"
+    # Solo se expone en loopback para herramientas locales; nunca publiques este puerto en un servidor.
+    ports:
+      - "127.0.0.1:1433:1433"
     volumes:
       - sqlserver_data:/var/opt/mssql
     healthcheck:

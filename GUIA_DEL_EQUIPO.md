@@ -142,7 +142,7 @@ docker compose exec db sh -c "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U s
 
 ### Ver la base con DBeaver o SSMS
 
-En `docker-compose.yml`, descomenta el puerto `127.0.0.1:1433:1433` del servicio `db` y reinicia. Conecta a `localhost,1433` con el usuario `retiro_app` y tu `DB_PASSWORD`, marcando "Trust server certificate". Nunca publiques ese puerto en un servidor.
+El puerto del servicio `db` ya está publicado solo en `127.0.0.1:1433`. Conecta a `localhost,1433` con el usuario `retiro_app` y tu `DB_PASSWORD`, marcando "Trust server certificate". Nunca publiques ese puerto en un servidor.
 
 ---
 
