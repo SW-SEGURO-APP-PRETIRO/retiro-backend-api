@@ -43,6 +43,8 @@ const state = {
   chatMessages: [],
   chatContacts: [],
   activeRoomId: null,
+  online: null, // {disponible, usuarios} de chat/conectados/ para la sala activa
+  onlineInst: null, // institución a la que corresponde `online`
 };
 
 let loadVersion = 0;
@@ -933,11 +935,50 @@ async function loadSystemChat(preserveRoom = true) {
       state.chatMessages = [];
     }
     renderSystemChatView();
+    // Al cambiar de sala se consulta quién está en línea en ese colegio
+    if (activeInstitution() !== state.onlineInst) loadOnline();
   } catch (error) {
     showError(error);
   } finally {
     content.setAttribute("aria-busy", "false");
   }
+}
+
+// ------------------------------------------------------------------ Usuarios en línea (presencia)
+function activeInstitution() {
+  return state.chatRooms.find((r) => r.id === state.activeRoomId)?.institucion_id ?? null;
+}
+function onlineHTML() {
+  if (!state.online || state.onlineInst !== activeInstitution())
+    return `<span class="chat-online-title"><span class="status-dot"></span>Consultando quién está en línea…</span>`;
+  if (!state.online.disponible)
+    return `<span class="chat-online-title"><span class="status-dot"></span>No se pudo consultar quién está en línea.</span>`;
+  const usuarios = state.online.usuarios || [];
+  return `<span class="chat-online-title"><span class="status-dot online"></span>En línea (${usuarios.length})</span>${usuarios
+    .map(
+      (u) =>
+        `<span class="chat-online-user ${u.estado === "AUSENTE" ? "away" : ""}" title="${e(human(u.rol))}${u.estado === "AUSENTE" ? " · Ausente" : ""}"><span class="status-dot"></span>${e(u.es_usted ? "Tú" : u.nombre)}<small>${e(human(u.rol))}</small></span>`,
+    )
+    .join("")}`;
+}
+async function loadOnline() {
+  const inst = activeInstitution();
+  if (!inst) return;
+  try {
+    const datos = (await api(`chat/conectados/?institucion_id=${encodeURIComponent(inst)}`)).datos;
+    if (inst !== activeInstitution()) return; // el usuario cambió de sala mientras se consultaba
+    state.online = datos;
+  } catch {
+    state.online = { disponible: false, usuarios: [] };
+  }
+  state.onlineInst = inst;
+  const box = document.querySelector("#chat-online");
+  if (box) box.innerHTML = onlineHTML();
+}
+let onlineTimer;
+function refreshOnlineSoon() {
+  clearTimeout(onlineTimer);
+  onlineTimer = setTimeout(loadOnline, 400);
 }
 
 function renderSystemChatView() {
@@ -965,6 +1006,7 @@ function renderSystemChatView() {
         <div><strong>${e(activeRoom ? activeRoom.nombre || `Sala general · ${activeRoom.institucion_nombre}` : "Sala general")}</strong><br><small class="muted">${e(activeRoom ? activeRoom.institucion_nombre : "Plataforma")} · Sala general única de la institución</small></div>
         ${badge("ACTIVA")}
       </header>
+      <div class="chat-online" id="chat-online" aria-live="polite">${onlineHTML()}</div>
       <div class="chat-messages" id="chat-messages">
         ${
           state.chatMessages.length
@@ -1105,6 +1147,13 @@ function connectNotifications() {
       if (page === "notificaciones" || page === "pendientes") loadRecords();
       else if (page === "inicio") overview();
     }
+    // Solo interesa si cambió alguien de la sala que se está mirando (o otro Administrador del Sistema)
+    if (
+      data.evento === "presencia.cambio" &&
+      page === "chat" &&
+      (data.institucion_id == null || data.institucion_id === activeInstitution())
+    )
+      refreshOnlineSoon();
     if (data.evento === "chat.mensaje" && data.mensaje) {
       if (page === "chat") {
         loadSystemChat(true);
@@ -1166,6 +1215,8 @@ async function start() {
       document.querySelector("#refresh-chat").onclick = () =>
         loadSystemChat(true);
       await loadSystemChat(false);
+      // Respaldo: una conexión que se corta sin avisar caduca en Redis a los 120 s
+      setInterval(loadOnline, 60000);
     } else {
       actions.innerHTML = `<button class="button" id="refresh" aria-label="Actualizar listado">${icon("refresh")} Actualizar</button>${page === "notificaciones" ? '<button class="button primary" id="read-all">Marcar todas leídas</button>' : ""}`;
       document.querySelector("#refresh").onclick = () => loadRecords();

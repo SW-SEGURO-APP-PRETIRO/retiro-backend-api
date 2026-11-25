@@ -201,3 +201,46 @@ def crear_cuenta_cuidador_fijo(actor, *, correo, cedula, nombres, apellidos, tel
     usuario.expira_temporal = timezone.now() + timedelta(hours=48)
     usuario.save(update_fields=["contrasena_temporal", "expira_temporal"])
     return usuario, contrasena
+
+
+def eliminar_estudiante(actor, estudiante):
+    """Elimina un estudiante solo si no tiene historia asociada; si la tiene, hay que inactivarlo.
+
+    Los demás módulos guardan al estudiante por id (sin clave foránea), así que la base de datos no
+    impide dejar registros huérfanos: la comprobación se hace aquí. Lanza ValueError con un mensaje
+    apto para mostrar al usuario.
+    """
+    # Importes locales: `cuidadores` y `retiros` dependen de `cuentas`; así se evita un ciclo al cargar.
+    from apps.cuidadores.models import AutorizacionCuidador
+    from apps.retiros.models import PaseEstudiante, Retiro
+
+    if estudiante.institucion_id != actor.institucion_id:
+        raise PermissionError("El estudiante no pertenece a su institución.")
+    motivos = []
+    if RelacionPadreEstudiante._base_manager.filter(estudiante_id=estudiante.pk).exists():
+        motivos.append("tiene representantes vinculados")
+    if AutorizacionCuidador._base_manager.filter(
+        institucion_id=estudiante.institucion_id, estudiante_id=estudiante.pk
+    ).exists():
+        motivos.append("tiene autorizaciones de cuidadores")
+    if (
+        Retiro._base_manager.filter(institucion_id=estudiante.institucion_id, estudiante_id=estudiante.pk).exists()
+        or PaseEstudiante._base_manager.filter(
+            institucion_id=estudiante.institucion_id, estudiante_id=estudiante.pk
+        ).exists()
+    ):
+        motivos.append("tiene historial de retiros")
+    if motivos:
+        raise ValueError(
+            "No se puede eliminar: " + ", ".join(motivos) + ". Márquelo como inactivo para conservar el historial."
+        )
+    estudiante_id = estudiante.pk
+    with transaction.atomic():
+        estudiante.delete()
+        _registrar_auditoria(
+            actor,
+            "ESTUDIANTE_ELIMINADO",
+            "EXITO",
+            {"estudiante_id": estudiante_id},
+            categoria=EventoAuditoria.Categoria.OPERATIVA,
+        )

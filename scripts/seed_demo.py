@@ -28,6 +28,25 @@ def _cedula(base9: str) -> str:
     return base9 + str((10 - suma % 10) % 10)
 
 
+def _codigo_cedula(inst, posicion: int) -> int:
+    """Dígito que identifica a la institución dentro de las cédulas ficticias (tercer dígito, 0-5).
+
+    Antes se usaba `inst.id` directamente, lo que solo funciona con ids del 1 al 5: SQL Server salta
+    los ids de 1000 en 1000 al reiniciarse y un id como 10002 generaba cédulas inválidas.
+    - Ids 1-5: se conserva `inst.id`, así quien ya cargó los datos obtiene EXACTAMENTE las mismas
+      cédulas y no se duplica ningún registro.
+    - Ids mayores (antes el script fallaba, así que no hay datos previos): se usa la posición del
+      colegio en la lista (1, 2…). Las cédulas solo deben ser únicas dentro de cada institución.
+    """
+    if inst is None:
+        return 0
+    if 1 <= inst.id <= 5:
+        return inst.id
+    if not 1 <= posicion <= 5:
+        raise ValueError("La semilla admite hasta 5 instituciones de demostración.")
+    return posicion
+
+
 def _ruc(base9: str) -> str:
     """RUC ficticio de sociedad privada (tercer dígito 9). Salta bases cuyo verificador sería 10."""
     coef = [4, 3, 2, 7, 6, 5, 4, 3, 2]
@@ -55,6 +74,7 @@ def sembrar(clave: str | None = None) -> dict:
 
     clave = clave or os.environ.get("SEED_PASSWORD", "ClaveDemo#2026")
     resumen = {}
+    posiciones = {}  # inst.id -> posición del colegio en la lista (ver _codigo_cedula)
 
     def usuario(correo, rol, inst, n, nombres, apellidos, **extra):
         if inst is None:
@@ -66,7 +86,7 @@ def sembrar(clave: str | None = None) -> dict:
         if u is None:
             u = Usuario.objects.crear_usuario(
                 correo, clave,
-                cedula=_cedula(f"17{inst.id if inst else 0}{n:02d}0001"),
+                cedula=_cedula(f"17{_codigo_cedula(inst, posiciones.get(inst.id, 0) if inst else 0)}{n:02d}0001"),
                 nombres=nombres, apellidos=apellidos, rol=rol,
                 institucion_id=inst.id if inst else None,
                 estado=Usuario.Estado.ACTIVA, **extra,
@@ -183,6 +203,8 @@ def sembrar(clave: str | None = None) -> dict:
                 inst.estado = Institucion.Estado.ACTIVA
                 inst.aprobada_en = timezone.now()
                 inst.save()
+            posiciones[inst.id] = i
+            cod = _codigo_cedula(inst, i)  # mismo valor que inst.id cuando el id va del 1 al 5
             puerta, puerta_creada = Puerta.objects.get_or_create(institucion_id=inst.id, nombre="Puerta principal")
             cursos = []
 
@@ -231,14 +253,14 @@ def sembrar(clave: str | None = None) -> dict:
                 )
                 cuidador = Cuidador._base_manager.filter(
                     institucion_id=inst.id,
-                    cedula=_cedula(f"17{inst.id}20{inst.id:02d}00"),
+                    cedula=_cedula(f"17{cod}20{cod:02d}00"),
                 ).first()
                 if cuidador is None:
                     cuidador = Cuidador.objects.create(
                         institucion_id=inst.id,
                         tipo=Cuidador.Tipo.FIJO,
                         usuario_id=cuidador_usuario.pk,
-                        cedula=_cedula(f"17{inst.id}20{inst.id:02d}00"),
+                        cedula=_cedula(f"17{cod}20{cod:02d}00"),
                         nombres=cuidador_nombres,
                         apellidos=cuidador_apellidos,
                         telefono="0987654321",
@@ -258,7 +280,7 @@ def sembrar(clave: str | None = None) -> dict:
                     cuidador.correo = cuidador_correo
                     cuidador.save()
 
-            temporal_cedula = _cedula(f"17{inst.id}30{inst.id:02d}00")
+            temporal_cedula = _cedula(f"17{cod}30{cod:02d}00")
             temporal = Cuidador._base_manager.filter(
                 institucion_id=inst.id,
                 cedula=temporal_cedula,
@@ -285,7 +307,7 @@ def sembrar(clave: str | None = None) -> dict:
                 start=1,
             ):
                 est, estudiante_creado = Estudiante.objects.get_or_create(
-                    institucion_id=inst.id, cedula=_cedula(f"17{inst.id}10{k:04d}"),
+                    institucion_id=inst.id, cedula=_cedula(f"17{cod}10{k:04d}"),
                     defaults=dict(nombres=nombres, apellidos=apellidos, curso_id=curso.id,
                                   fecha_nacimiento=fecha_nacimiento),
                 )

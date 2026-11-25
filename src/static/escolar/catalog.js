@@ -50,6 +50,9 @@ export const catalog = {
     ],
     defaults: { estado: "ACTIVO" },
     remove: true,
+    // Paginación, búsqueda y filtro de estado se resuelven en el servidor (?page=&q=&estado=)
+    serverPaging: true,
+    serverSearch: true,
   },
   padres: {
     endpoint: "cuentas/usuarios/",

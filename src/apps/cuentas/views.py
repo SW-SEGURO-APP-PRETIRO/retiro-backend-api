@@ -1,10 +1,12 @@
 from django.db import IntegrityError
-from drf_spectacular.utils import extend_schema
+from django.db.models import Q
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.instituciones.models import Institucion
+from shared.api import PaginacionEnvuelta
 from shared.permissions import EsAdminEscolar, EsAdminSistema, EsAdminSistemaOEscolar, EsMiembroInstitucion, EsPadreOAdminEscolar
 
 from .models import Estudiante, RelacionPadreEstudiante, Rol, Usuario
@@ -22,6 +24,7 @@ from .services import (
     crear_usuario_institucional,
     editar_estudiante,
     editar_usuario,
+    eliminar_estudiante,
 )
 
 
@@ -144,6 +147,37 @@ class CambiarEstadoUsuarioView(APIView):
         return ok(UsuarioSerializer(usuario).data, "Estado de usuario actualizado.")
 
 
+class PaginacionEstudiantes(PaginacionEnvuelta):
+    mensaje = "Estudiantes obtenidos."
+
+    def get_page_number(self, request, paginator):
+        # Una página fuera de rango (p. ej. tras eliminar el último de la página) devuelve la última
+        # en lugar de un error 404.
+        numero = super().get_page_number(request, paginator)
+        try:
+            return min(max(int(numero), 1), paginator.num_pages)
+        except (TypeError, ValueError):
+            return 1
+
+
+ESTADOS_ESTUDIANTE = {Estudiante.Estado.ACTIVO, Estudiante.Estado.INACTIVO}
+
+
+def filtrar_estudiantes(queryset, params):
+    """Búsqueda (`q`) en nombres, apellidos o cédula y filtro por `estado`.
+
+    Cada palabra de `q` debe aparecer en algún campo, así «Luis Padre1» encuentra a Luis de apellido Padre1.
+    """
+    for termino in (params.get("q") or "").split()[:5]:
+        queryset = queryset.filter(
+            Q(nombres__icontains=termino) | Q(apellidos__icontains=termino) | Q(cedula__icontains=termino)
+        )
+    estado = params.get("estado")
+    if estado in ESTADOS_ESTUDIANTE:
+        queryset = queryset.filter(estado=estado)
+    return queryset
+
+
 class EstudianteListCreateView(APIView):
     permission_classes = [EsMiembroInstitucion]
     serializer_class = EstudianteSerializer
@@ -153,7 +187,17 @@ class EstudianteListCreateView(APIView):
             return [EsAdminEscolar()]
         return [EsMiembroInstitucion()]
 
-    @extend_schema(tags=["Cuentas"], request=None, responses=EstudianteSerializer(many=True))
+    @extend_schema(
+        tags=["Cuentas"],
+        request=None,
+        responses=EstudianteSerializer(many=True),
+        parameters=[
+            OpenApiParameter("page", int, description="Página (20 por página). Sin este parámetro se devuelve la lista completa."),
+            OpenApiParameter("tamano", int, description="Resultados por página (máx. 100)"),
+            OpenApiParameter("q", str, description="Busca en nombres, apellidos o cédula"),
+            OpenApiParameter("estado", str, description="ACTIVO o INACTIVO"),
+        ],
+    )
     def get(self, request):
         queryset = Estudiante.objects.all()
         if request.user.rol == Rol.PADRE:
@@ -171,6 +215,13 @@ class EstudianteListCreateView(APIView):
                 cuidador_id__in=cuidador_ids,
             ).values_list("estudiante_id", flat=True)
             queryset = queryset.filter(pk__in=est_ids)
+        queryset = filtrar_estudiantes(queryset, request.query_params)
+        # Con ?page= se pagina en el servidor (pantalla de Estudiantes). Sin él se responde la lista
+        # completa como siempre: la usan el resumen, las asignaciones y los selectores de los formularios.
+        if "page" in request.query_params:
+            paginador = PaginacionEstudiantes()
+            pagina = paginador.paginate_queryset(queryset.order_by("apellidos", "nombres", "id"), request, view=self)
+            return paginador.get_paginated_response(EstudianteSerializer(pagina, many=True).data)
         return ok(
             EstudianteSerializer(queryset.order_by("id"), many=True).data,
             "Estudiantes obtenidos.",
@@ -222,7 +273,18 @@ class EstudianteDetailView(APIView):
             estudiante = self.get_object(pk)
         except Estudiante.DoesNotExist:
             return error("NO_ENCONTRADO", "El estudiante no existe.", http_status=404)
-        estudiante.delete()
+        try:
+            # El servicio comprueba el historial (representantes, autorizaciones, retiros) y registra
+            # el borrado en la bitácora. Si hay historial responde 409 con un mensaje claro.
+            eliminar_estudiante(request.user, estudiante)
+        except (ValueError, PermissionError) as exc:
+            return error("CONFLICTO", str(exc), http_status=status.HTTP_409_CONFLICT)
+        except IntegrityError:
+            return error(
+                "CONFLICTO",
+                "No se puede eliminar: el estudiante tiene registros asociados. Márquelo como inactivo.",
+                http_status=status.HTTP_409_CONFLICT,
+            )
         return ok({}, "Estudiante eliminado.")
 
 

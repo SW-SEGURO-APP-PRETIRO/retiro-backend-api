@@ -1,0 +1,63 @@
+{% extends 'escolar/base.html' %}{% load static %}
+{% block body %}
+<main id="main" class="auth-layout registro-layout">
+  <section class="auth-story">
+    <a class="brand" href="/autenticacion/ingresar/"><img src="{% static 'escolar/mark.svg' %}" alt="" width="34" height="38"><span>Retiro Seguro<small>Registro de instituciones</small></span></a>
+    <div class="story-content">
+      <p class="eyebrow">Únete a Retiro Seguro</p>
+      <h2>Tu colegio,<br>listo en tres pasos.</h2>
+      <ol class="registro-pasos">
+        <li class="{% if not enviado %}actual{% else %}hecho{% endif %}"><span>1</span><div><strong>Regístrate</strong><p>Ingresa tus datos y los de tu institución. Serás su Administrador Escolar.</p></div></li>
+        <li class="{% if enviado %}actual{% endif %}"><span>2</span><div><strong>Revisión</strong><p>El Administrador del Sistema verifica el RUC y aprueba la solicitud.</p></div></li>
+        <li><span>3</span><div><strong>Ingresa</strong><p>Te avisamos por correo y ya puedes iniciar sesión con tu contraseña.</p></div></li>
+      </ol>
+    </div>
+    <small>Los datos se usan solo para verificar la institución.</small>
+  </section>
+
+  <section class="auth-form-wrap">
+    <div class="auth-form registro-form">
+    {% if enviado %}
+      <div class="registro-enviado" role="status">
+        <span class="registro-check" aria-hidden="true">✓</span>
+        <p class="eyebrow">Solicitud enviada</p>
+        <h1>¡Gracias por registrarte!</h1>
+        <p class="muted">La solicitud de <strong>{{ enviado.institucion }}</strong> quedó <strong>pendiente de aprobación</strong>. El Administrador del Sistema la revisará pronto.</p>
+        <p class="muted">Te avisaremos a <strong>{{ enviado.correo }}</strong>. Cuando sea aprobada, podrás iniciar sesión con ese correo y la contraseña que elegiste.</p>
+        <a class="button primary registro-volver" href="/autenticacion/ingresar/">Ir al inicio de sesión <span aria-hidden="true">→</span></a>
+      </div>
+    {% else %}
+      <p class="eyebrow">Registro de institución</p>
+      <h1>{{ title }}</h1>
+      <p class="muted">Todos los campos con <span class="obligatorio" aria-hidden="true">*</span> son obligatorios.</p>
+
+      {% if form.non_field_errors %}<div class="error-box" role="alert">{% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}</div>{% endif %}
+      {% if form.errors and not form.non_field_errors %}<div class="error-box" role="alert">Revisa los campos marcados: hay {{ form.errors|length }} dato{{ form.errors|length|pluralize }} por corregir.</div>{% endif %}
+
+      <form method="post" id="registro-form" novalidate>{% csrf_token %}
+        {% for numero, titulo, descripcion, campos in form.secciones %}
+        <fieldset class="registro-seccion">
+          <legend><span class="registro-numero">{{ numero }}</span>{{ titulo }}</legend>
+          <p class="registro-descripcion">{{ descripcion }}</p>
+          <div class="form-grid">
+            {% for field in campos %}
+            <label for="{{ field.id_for_label }}" class="{% if field.field.ancho_completo %}ancho-completo{% endif %}{% if field.errors %} con-error{% endif %}">
+              <span>{{ field.label }}{% if field.field.required %} <span class="obligatorio" aria-hidden="true">*</span>{% endif %}</span>
+              {{ field }}
+              {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+              {% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+            {% endfor %}
+          </div>
+        </fieldset>
+        {% endfor %}
+        <p class="registro-legal">Al enviar confirmas que representas a la institución y que los datos son verdaderos.</p>
+        <button class="button primary" type="submit" id="registro-enviar">Enviar solicitud <span aria-hidden="true">→</span></button>
+      </form>
+      <a class="auth-link" href="/autenticacion/ingresar/">¿Ya tienes una cuenta? Inicia sesión</a>
+    {% endif %}
+    </div>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}{% if not enviado %}<script type="module" src="{% static 'escolar/registro.js' %}"></script>{% endif %}{% endblock %}

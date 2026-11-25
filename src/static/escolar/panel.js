@@ -37,6 +37,7 @@ const state = {
   chatMessages: [],
   chatContacts: [],
   activeRoomId: null,
+  online: null, // {disponible, usuarios} de chat/conectados/
 };
 const isPadre = () => state.user?.rol === "PADRE";
 const isAdminEscolar = () => state.user?.rol === "ADMIN_ESCOLAR";
@@ -129,6 +130,7 @@ function rowActions(row) {
         : b("activate", "Activar"))
     );
   return (
+    (page === "estudiantes" ? b("view", "Ver detalle") : "") +
     (!config.noEdit ? b("edit", "Editar") : "") +
     (config.remove ? b("delete", "Eliminar", "danger-text") : "")
   );
@@ -145,12 +147,17 @@ function renderList() {
   document.querySelector("#search")?.addEventListener("input", (ev) => {
     state.search = ev.target.value;
     state.page = 1;
-    renderTable();
+    if (config.serverSearch) {
+      // Espera a que la persona deje de escribir antes de consultar al servidor
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(loadRecords, 300);
+    } else renderTable();
   });
   document.querySelector("#status-filter")?.addEventListener("change", (ev) => {
     state.status = ev.target.value;
     state.page = 1;
-    renderTable();
+    if (config.serverSearch) loadRecords();
+    else renderTable();
   });
   document.querySelector("#audit-filters")?.addEventListener("submit", (ev) => {
     ev.preventDefault();
@@ -167,8 +174,10 @@ function renderList() {
   );
   renderTable();
 }
+let searchTimer;
 function filteredRecords() {
-  const q = state.search.toLocaleLowerCase("es");
+  // Con búsqueda en el servidor la página ya viene filtrada
+  const q = config.serverSearch ? "" : state.search.toLocaleLowerCase("es");
   return state.records.filter(
     (row) =>
       (!state.status || config.serverPaging || row.estado === state.status) &&
@@ -206,6 +215,10 @@ async function loadRecords() {
   try {
     const params = new URLSearchParams(config.query || "");
     if (config.serverPaging) params.set("page", state.page);
+    if (config.serverSearch) {
+      if (state.search.trim()) params.set("q", state.search.trim());
+      if (state.status) params.set("estado", state.status);
+    }
     if (page === "notificaciones" && state.status)
       params.set("no_leidas", "true");
     for (const [key, value] of Object.entries(state.audit || {}))
@@ -216,7 +229,12 @@ async function loadRecords() {
     if (version !== loadVersion) return;
     state.records = rows(result);
     state.total = result.datos?.total ?? state.records.length;
-    if (page === "bitacora" && document.querySelector("#audit-filters"))
+    // Si la barra de búsqueda ya está en pantalla solo se redibuja la tabla: así el cuadro de
+    // búsqueda no pierde el foco mientras se escribe.
+    if (
+      (page === "bitacora" && document.querySelector("#audit-filters")) ||
+      (config.serverSearch && document.querySelector("#table-region"))
+    )
       renderTable();
     else renderList();
   } catch (error) {
@@ -388,6 +406,36 @@ async function edit(row = null) {
   };
   dialog.showModal();
 }
+// Consulta por identificador: siempre se pide al servidor (no se reutiliza la fila del listado),
+// así el detalle refleja el estado actual y respeta los permisos de la API.
+async function showStudent(id) {
+  errorBox.hidden = true;
+  try {
+    const [estudiante, relaciones, padres] = await Promise.all([
+      api(`cuentas/estudiantes/${encodeURIComponent(id)}/`),
+      api("cuentas/relaciones-padre-estudiante/"),
+      api("cuentas/usuarios/?rol=PADRE"),
+    ]);
+    const s = estudiante.datos;
+    const curso = find("cursos", s.curso_id);
+    const salida = s.hora_salida_especial
+      ? `${time(s.hora_salida_especial)} (horario especial)`
+      : `${time(curso?.hora_salida)} (horario del curso)`;
+    const listaPadres = rows(padres);
+    const representantes = rows(relaciones)
+      .filter((r) => String(r.estudiante) === String(s.id))
+      .map((r) => {
+        const p = listaPadres.find((x) => String(x.id) === String(r.padre));
+        return `<li>${e(p ? name(p) : `Representante #${r.padre}`)}${p?.correo ? ` <small class="muted">· ${e(p.correo)}</small>` : ""} ${badge(r.vigente ? "ACTIVO" : "INACTIVO")}</li>`;
+      });
+    showDetail(
+      `Estudiante #${s.id}`,
+      `<dl><dt>Nombres</dt><dd>${e(s.nombres)}</dd><dt>Apellidos</dt><dd>${e(s.apellidos)}</dd><dt>Cédula</dt><dd>${e(s.cedula)}</dd><dt>Fecha de nacimiento</dt><dd>${e(s.fecha_nacimiento)}</dd><dt>Curso</dt><dd>${e(curso ? curso.nombre : `#${s.curso_id}`)}</dd><dt>Hora de salida</dt><dd>${e(salida)}</dd><dt>Estado</dt><dd>${badge(s.estado)}</dd></dl><h3>Representantes</h3>${representantes.length ? `<ul class="detail-list">${representantes.join("")}</ul>` : '<p class="muted">Sin representantes vinculados. Puedes vincularlos en Asignaciones.</p>'}`,
+    );
+  } catch (error) {
+    showError(error);
+  }
+}
 function showDetail(title, html) {
   document.querySelector("#detail-title").textContent = title;
   document.querySelector("#detail-body").innerHTML = html;
@@ -425,6 +473,7 @@ function confirm(title, description, operation, label = "Confirmar") {
 async function act(action, id) {
   const row = state.records.find((r) => r.id === Number(id));
   if (!row) return;
+  if (action === "view") return showStudent(row.id);
   if (action === "edit") return edit(row);
   if (action === "activate" || action === "deactivate")
     return confirm(
@@ -709,11 +758,42 @@ async function loadChat() {
       ? res.datos.mensajes
       : [];
     renderChatView();
+    if (!state.online) loadOnline(); // después la mantienen al día los avisos del WebSocket
   } catch (error) {
     showError(error);
   } finally {
     content.setAttribute("aria-busy", "false");
   }
+}
+
+// ------------------------------------------------------------------ Usuarios en línea (presencia)
+function onlineHTML() {
+  if (!state.online)
+    return `<span class="chat-online-title"><span class="status-dot"></span>Consultando quién está en línea…</span>`;
+  if (!state.online.disponible)
+    return `<span class="chat-online-title"><span class="status-dot"></span>No se pudo consultar quién está en línea.</span>`;
+  const usuarios = state.online.usuarios || [];
+  return `<span class="chat-online-title"><span class="status-dot online"></span>En línea (${usuarios.length})</span>${usuarios
+    .map(
+      (u) =>
+        `<span class="chat-online-user ${u.estado === "AUSENTE" ? "away" : ""}" title="${e(human(u.rol))}${u.estado === "AUSENTE" ? " · Ausente" : ""}"><span class="status-dot"></span>${e(u.es_usted ? "Tú" : u.nombre)}<small>${e(human(u.rol))}</small></span>`,
+    )
+    .join("")}`;
+}
+async function loadOnline() {
+  try {
+    state.online = (await api("chat/conectados/")).datos;
+  } catch {
+    state.online = { disponible: false, usuarios: [] };
+  }
+  const box = document.querySelector("#chat-online");
+  if (box) box.innerHTML = onlineHTML();
+}
+// Varios avisos seguidos (p. ej. alguien recarga la página) se agrupan en una sola consulta
+let onlineTimer;
+function refreshOnlineSoon() {
+  clearTimeout(onlineTimer);
+  onlineTimer = setTimeout(loadOnline, 400);
 }
 
 function renderChatView() {
@@ -726,6 +806,7 @@ function renderChatView() {
       <div><strong>${e(activeRoom.nombre || "Sala general de la institución")}</strong><br><small class="muted">Sala general única del colegio · Participan administradores escolares, padres, guardias y cuidadores fijos</small></div>
       ${badge("ACTIVA")}
     </header>
+    <div class="chat-online" id="chat-online" aria-live="polite">${onlineHTML()}</div>
     <div class="chat-messages" id="chat-messages">
       ${
         state.chatMessages.length
@@ -809,6 +890,7 @@ function connectNotifications() {
       updateNotificationCount().catch(() => {});
       if (page === "notificaciones") loadRecords();
     }
+    if (data.evento === "presencia.cambio" && page === "chat") refreshOnlineSoon();
     if (data.evento === "chat.mensaje" && data.mensaje) {
       if (page === "chat") {
         loadChat(true);
@@ -874,6 +956,8 @@ async function start() {
       actions.innerHTML = `<button class="button" id="refresh-chat">${icon("refresh")} Actualizar</button>`;
       document.querySelector("#refresh-chat").onclick = () => loadChat();
       await loadChat();
+      // Respaldo: una conexión que se corta sin avisar caduca en Redis a los 120 s
+      setInterval(loadOnline, 60000);
     } else if (page === "institucion") {
       if (!isAdminEscolar()) {
         actions.innerHTML = `<a href="/escolar/chat/" class="button primary">${icon("chat")} Contactar al colegio</a>`;
@@ -910,6 +994,10 @@ async function start() {
         ),
       );
       await loadRecords();
+      // Consulta directa por identificador: /escolar/estudiantes/?id=5
+      const idConsulta = new URLSearchParams(location.search).get("id");
+      if (page === "estudiantes" && isAdminEscolar() && /^\d+$/.test(idConsulta || ""))
+        await showStudent(idConsulta);
     }
     updateNotificationCount().catch(() => {});
     connectNotifications();

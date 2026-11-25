@@ -1628,3 +1628,254 @@ summary {
   }
 }
 
+
+/* ---------------------------------------------------------------- Registro de institución (SignUp) */
+.registro-layout {
+  align-items: start;
+}
+.registro-layout .auth-story {
+  position: sticky;
+  top: 16px;
+  min-height: calc(100dvh - 32px);
+}
+.registro-layout .auth-form-wrap {
+  min-height: calc(100dvh - 32px);
+}
+.auth-form.registro-form {
+  width: 560px;
+}
+.registro-pasos {
+  list-style: none;
+  margin: 32px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.registro-pasos li {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  color: #52695c;
+}
+.registro-pasos li > span {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1.5px solid #779b87;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+.registro-pasos li strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.registro-pasos li p {
+  margin: 2px 0 0;
+  font-size: 14px;
+}
+.registro-pasos li.actual > span {
+  background: #233d32;
+  border-color: #233d32;
+  color: #fff;
+}
+.registro-pasos li.hecho > span {
+  background: #b0c9b8;
+  border-color: #b0c9b8;
+  color: #233d32;
+}
+.registro-form > .error-box {
+  margin: 24px 0 0;
+}
+.registro-form > .error-box p {
+  margin: 0;
+}
+.registro-form form {
+  gap: 28px;
+}
+.registro-seccion {
+  border: 0;
+  margin: 0;
+  padding: 0 0 28px;
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+.registro-seccion legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.registro-numero {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--active);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+}
+.registro-descripcion {
+  margin: 6px 0 18px 34px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.registro-form .form-grid label {
+  font-size: 13px;
+}
+.registro-form .form-grid .ancho-completo {
+  grid-column: 1 / -1;
+}
+.registro-form input {
+  height: 44px;
+}
+.obligatorio {
+  color: #8b382c;
+}
+.registro-form label.con-error input {
+  border-color: #c4574a;
+  background: #fffaf9;
+}
+.field-error {
+  color: #8b382c !important;
+  font-weight: 500 !important;
+}
+.field-error::before {
+  content: "⚠ ";
+}
+.registro-legal {
+  font-size: 12px;
+  color: var(--muted);
+  margin: -8px 0 0;
+}
+.registro-form .button.primary {
+  justify-content: space-between;
+  height: 46px;
+}
+.registro-form .button.primary:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+.registro-enviado {
+  text-align: left;
+}
+.registro-enviado .muted {
+  margin-top: 14px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.registro-check {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #eff6ee;
+  color: #30583b;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  margin-bottom: 20px;
+}
+.registro-volver {
+  width: 100%;
+  margin-top: 32px;
+}
+@media (max-width: 1100px) {
+  .auth-form.registro-form {
+    width: 100%;
+    max-width: 560px;
+  }
+}
+@media (max-width: 600px) {
+  .registro-layout .auth-story {
+    position: static;
+    min-height: 0;
+  }
+  .registro-layout .auth-form-wrap {
+    min-height: 0;
+  }
+  .registro-descripcion {
+    margin-left: 0;
+  }
+}
+.auth-registro {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+.auth-registro a {
+  color: var(--accent);
+  font-weight: 600;
+}
+.auth-registro a:hover {
+  text-decoration: underline;
+}
+
+/* ------------------------------------------------------------------ Chat: usuarios en línea */
+.chat-online {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  background: #f8faf9;
+  font-size: 12px;
+  max-height: 96px;
+  overflow-y: auto;
+}
+.chat-online-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-right: 4px;
+}
+.chat-online .status-dot {
+  width: 8px;
+  height: 8px;
+  color: var(--control);
+}
+.chat-online .status-dot.online,
+.chat-online-user .status-dot {
+  color: #2f9e5b;
+}
+.chat-online-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-weight: 500;
+}
+.chat-online-user small {
+  color: var(--muted);
+  font-weight: 400;
+}
+.chat-online-user.away .status-dot {
+  color: #ac7c22;
+}
+.detail-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.detail-list li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 14px;
+}

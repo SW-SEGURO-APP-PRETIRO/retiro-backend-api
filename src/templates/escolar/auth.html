@@ -11,7 +11,7 @@
     <div id="auth-error" class="error-box" role="alert" hidden></div><div id="auth-message" role="status" class="success-box" hidden></div>
     <button class="button primary" type="submit">{% if mode == 'ingresar' %}Entrar al panel <span aria-hidden="true">→</span>{% elif mode == 'recuperar' %}Solicitar recuperación{% else %}Actualizar contraseña{% endif %}</button>
   </form>
-  {% if mode == 'ingresar' %}<a class="auth-link" href="/autenticacion/recuperar/">¿Olvidaste tu contraseña?</a>{% else %}<a class="auth-link" href="/autenticacion/ingresar/">Volver al inicio de sesión</a>{% endif %}
+  {% if mode == 'ingresar' %}<a class="auth-link" href="/autenticacion/recuperar/">¿Olvidaste tu contraseña?</a><p class="auth-registro">¿Tu institución aún no usa Retiro Seguro? <a href="/autenticacion/registrar/">Regístrala aquí</a></p>{% else %}<a class="auth-link" href="/autenticacion/ingresar/">Volver al inicio de sesión</a>{% endif %}
   <p class="auth-note">El acceso a la información de estudiantes está reservado al personal autorizado de la institución.</p></div></section>
 </main>
 {% endblock %}

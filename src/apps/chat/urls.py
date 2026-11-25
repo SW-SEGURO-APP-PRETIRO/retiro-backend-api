@@ -7,6 +7,7 @@ from .views import (
     NotificacionListView,
     SalaChatListCreateView,
     SalaGeneralMensajesView,
+    UsuariosConectadosView,
 )
 
 urlpatterns = [
@@ -16,6 +17,7 @@ urlpatterns = [
     path("salas/", SalaChatListCreateView.as_view(), name="chat-sala-list-create"),
     path("salas/<int:pk>/mensajes/", MensajeChatListCreateView.as_view(), name="chat-mensaje-list-create"),
     path("general/", SalaGeneralMensajesView.as_view(), name="chat-sala-general"),
+    path("conectados/", UsuariosConectadosView.as_view(), name="chat-usuarios-conectados"),
 ]
 
 

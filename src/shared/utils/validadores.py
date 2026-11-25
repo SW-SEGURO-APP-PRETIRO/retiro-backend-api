@@ -18,28 +18,24 @@ def _es_cedula(valor: str) -> bool:
     return verificador == int(valor[9])
 
 
-def _digito_modulo11(digitos: str, coeficientes: list[int]) -> int:
-    suma = sum(int(d) * c for d, c in zip(digitos, coeficientes))
-    residuo = suma % 11
-    return 0 if residuo == 0 else 11 - residuo
-
-
 def _es_ruc(valor: str) -> bool:
+    """Valida la ESTRUCTURA del RUC, no su dígito verificador.
+
+    El SRI emite RUCs de sociedades que ya no cumplen el módulo 11, así que exigirlo rechazaría RUCs
+    reales (y obliga a usar RUCs calculados en las pruebas). Se comprueba:
+    - 13 dígitos numéricos;
+    - provincia 01-24 o 30;
+    - tercer dígito 0-5 (persona natural), 6 (entidad pública) o 9 (sociedad privada);
+    - establecimiento (últimos 3 dígitos) distinto de 000.
+    """
     if not (valor.isdigit() and len(valor) == 13):
         return False
     provincia = int(valor[:2])
     if not (1 <= provincia <= 24 or provincia == 30):
         return False
-    tercero = int(valor[2])
-    if tercero < 6:  # persona natural: cédula + establecimiento
-        return _es_cedula(valor[:10]) and int(valor[10:]) >= 1
-    if tercero == 6:  # entidad pública: dígito 9, establecimiento de 4 dígitos
-        dv = _digito_modulo11(valor[:8], [3, 2, 7, 6, 5, 4, 3, 2])
-        return dv == int(valor[8]) and int(valor[9:]) >= 1
-    if tercero == 9:  # sociedad privada: dígito 10, establecimiento de 3 dígitos
-        dv = _digito_modulo11(valor[:9], [4, 3, 2, 7, 6, 5, 4, 3, 2])
-        return dv == int(valor[9]) and int(valor[10:]) >= 1
-    return False
+    if valor[2] not in "0123456" + "9":
+        return False
+    return int(valor[10:]) >= 1
 
 
 def validar_cedula_ec(valor: str) -> None:
@@ -49,4 +45,8 @@ def validar_cedula_ec(valor: str) -> None:
 
 def validar_ruc_ec(valor: str) -> None:
     if not _es_ruc(valor or ""):
-        raise ValidationError("RUC ecuatoriano inválido.", code="ruc_invalido")
+        raise ValidationError(
+            "RUC inválido: deben ser 13 dígitos, empezar con un código de provincia (01-24 o 30) "
+            "y terminar en el número de establecimiento (por ejemplo 001).",
+            code="ruc_invalido",
+        )

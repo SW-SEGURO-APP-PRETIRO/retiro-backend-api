@@ -138,6 +138,8 @@ EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
 EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=False)
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="Retiro Escolar Seguro <no-responder@retiro.local>")
+# Dirección pública del sitio, para los enlaces que se envían por correo
+SITE_URL = env("SITE_URL", default="https://localhost:8443").rstrip("/")
 
 # ------------------------------------------------------------------------- API
 REST_FRAMEWORK = {

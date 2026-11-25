@@ -230,3 +230,35 @@ class MensajeChatListCreateView(APIView):
             status=status.HTTP_201_CREATED,
         )
 
+
+
+class UsuariosConectadosView(APIView):
+    """Quién está en línea en la sala general del usuario (indicación de usuarios conectados)."""
+
+    @extend_schema(
+        tags=TAG_CHAT,
+        summary="Usuarios conectados en la sala general",
+        parameters=[
+            OpenApiParameter(
+                "institucion_id", int, description="Solo ADMIN_SISTEMA: institución de la sala que está viendo"
+            )
+        ],
+        request=None,
+        operation_id="chat_usuarios_conectados",
+    )
+    def get(self, request):
+        institucion_id = request.query_params.get("institucion_id")
+        if institucion_id is not None and not institucion_id.isdigit():
+            return Response(
+                {"error": {"codigo": "PARAMETRO_INVALIDO", "mensaje": "institucion_id debe ser numérico.", "detalles": {}}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        disponible, usuarios = services.usuarios_conectados(
+            request.user, int(institucion_id) if institucion_id else None
+        )
+        return Response(
+            {
+                "datos": {"disponible": disponible, "total": len(usuarios), "usuarios": usuarios},
+                "mensaje": "Usuarios conectados obtenidos." if disponible else "La presencia no está disponible ahora.",
+            }
+        )

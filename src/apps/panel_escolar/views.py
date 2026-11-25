@@ -1,11 +1,20 @@
-"""Solo presentación. Las operaciones de negocio siguen en la API existente."""
+"""Solo presentación. Las operaciones de negocio siguen en los servicios de cada módulo."""
+import logging
+
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.shortcuts import redirect, render
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_http_methods
 from apps.cuentas.models import Rol
+from apps.instituciones.services import registrar_institucion_con_contrasena
 from shared.permissions import EsAdminEscolar
+
+from .forms import RegistroInstitucionForm
+
+logger = logging.getLogger(__name__)
 
 ADMIN_PAGES = [
     ("inicio", "Resumen", "home", "Tu institución, al día."),
@@ -73,3 +82,40 @@ def auth_page(request, mode="ingresar"):
     return render(request, "escolar/auth.html", {"mode": mode, "title": titles[mode], "preview": getattr(settings, "ESCOLAR_PREVIEW", False)})
 
 
+
+@never_cache
+@require_http_methods(["GET", "POST"])
+def registro(request):
+    """SignUp web: la persona registra su institución y se convierte en su Administrador Escolar.
+
+    Renderizado en el servidor. Tras un registro válido se redirige (POST → redirect → GET) a la misma
+    página en estado «solicitud enviada», para que recargar no duplique el envío.
+    """
+    if request.user.is_authenticated:
+        return redirect("/")
+    if request.method == "GET" and "enviado" in request.GET:
+        enviado = request.session.pop("registro_enviado", None)
+        if not enviado:
+            return redirect("web-registrar")
+        return render(request, "escolar/registro.html", {"title": "Solicitud enviada", "enviado": enviado})
+
+    form = RegistroInstitucionForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        try:
+            institucion, usuario = registrar_institucion_con_contrasena(
+                form.datos_servicio(), form.cleaned_data["contrasena"]
+            )
+        except ValidationError as exc:
+            # Validaciones del modelo que el formulario no anticipó: se muestran, nunca un error 500
+            errores = exc.message_dict if hasattr(exc, "error_dict") else {None: exc.messages}
+            for campo, mensajes in errores.items():
+                destino = {"cedula": "admin_cedula", "correo": "admin_correo"}.get(campo)
+                form.add_error(destino, mensajes)
+        except IntegrityError:
+            # Otra persona registró el mismo RUC o correo justo ahora
+            logger.info("Registro rechazado por datos duplicados (carrera entre solicitudes).")
+            form.add_error(None, "Ya existe una institución o una cuenta con estos datos. Revisa el RUC y los correos.")
+        else:
+            request.session["registro_enviado"] = {"institucion": institucion.nombre, "correo": usuario.correo}
+            return redirect(f"{request.path}?enviado=1")
+    return render(request, "escolar/registro.html", {"title": "Registra tu institución", "form": form})

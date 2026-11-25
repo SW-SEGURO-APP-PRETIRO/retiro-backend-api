@@ -77,7 +77,11 @@ form.addEventListener("submit", async (event) => {
   } catch (error) {
     errorBox.textContent =
       mode === "ingresar" && error.status === 401
-        ? "No se pudo iniciar sesión. Revisa tus credenciales."
+        ? // Credenciales erróneas: mensaje genérico. Otros motivos (solicitud pendiente, cuenta
+          // bloqueada…) los explica el servidor y se muestran tal cual.
+          error.message && error.message !== "Credenciales inválidas."
+          ? error.message
+          : "No se pudo iniciar sesión. Revisa tus credenciales."
         : errorText(error);
     errorBox.hidden = false;
   } finally {

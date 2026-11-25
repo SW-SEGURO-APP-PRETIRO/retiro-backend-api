@@ -99,6 +99,18 @@ def _notificar_bloqueo_de_cuenta(user):
         logging.getLogger(__name__).exception("No se pudo notificar el bloqueo de la cuenta.")
 
 
+MENSAJES_INSTITUCION_NO_ACTIVA = {
+    Institucion.Estado.PENDIENTE_APROBACION: (
+        "Tu solicitud de registro está pendiente de aprobación. Te avisaremos por correo cuando "
+        "el Administrador del Sistema la revise."
+    ),
+    Institucion.Estado.RECHAZADA: (
+        "La solicitud de registro de tu institución no fue aprobada. Revisa el correo con el motivo."
+    ),
+    Institucion.Estado.SUSPENDIDA: "Tu institución está suspendida. Comunícate con el equipo de Retiro Seguro.",
+}
+
+
 def autenticar(request, correo, contrasena):
     user = Usuario._base_manager.filter(correo__iexact=correo).first()
     ahora = timezone.now()
@@ -108,17 +120,6 @@ def autenticar(request, correo, contrasena):
     if user and user.estado in (Usuario.Estado.BLOQUEADA, Usuario.Estado.SUSPENDIDA):
         _registrar_auditoria(user, "INGRESO_RECHAZADO", "FALLO", {"motivo": user.estado})
         return None, "La cuenta no está disponible."
-    if user and user.rol == "ADMIN_ESCOLAR" and user.institucion_id:
-        institucion = Institucion.objects.filter(pk=user.institucion_id).only("estado").first()
-        if not institucion or institucion.estado != Institucion.Estado.ACTIVA:
-            _registrar_auditoria(
-                user,
-                "INGRESO_RECHAZADO",
-                "FALLO",
-                {"motivo": "institucion_no_activa"},
-            )
-            return None, "La institución todavía no está activa."
-
     autenticado = authenticate(request, username=correo, password=contrasena)
     if autenticado is None:
         if user:
@@ -137,6 +138,17 @@ def autenticar(request, correo, contrasena):
             if user.intentos_fallidos >= 3:
                 _notificar_bloqueo_de_cuenta(user)
         return None, "Credenciales inválidas."
+
+    # El estado de la institución se informa solo a quien ya demostró conocer la contraseña:
+    # así no se revela a terceros si un correo está registrado ni en qué estado está su colegio.
+    if autenticado.rol == Rol.ADMIN_ESCOLAR and autenticado.institucion_id:
+        institucion = Institucion.objects.filter(pk=autenticado.institucion_id).only("estado").first()
+        if not institucion or institucion.estado != Institucion.Estado.ACTIVA:
+            estado = institucion.estado if institucion else None
+            _registrar_auditoria(
+                autenticado, "INGRESO_RECHAZADO", "FALLO", {"motivo": "institucion_no_activa", "estado": estado}
+            )
+            return None, MENSAJES_INSTITUCION_NO_ACTIVA.get(estado, "La institución todavía no está activa.")
 
     # TOTP/2FA reservado para el 2.º bimestre. El 1.er bimestre usa solo correo y contraseña.
     # codigo_totp = request.data.get("codigo_totp", "")

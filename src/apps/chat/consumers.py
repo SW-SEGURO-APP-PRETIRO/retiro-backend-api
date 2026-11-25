@@ -44,11 +44,15 @@ class NotificacionesConsumer(AsyncJsonWebsocketConsumer):
             self.grupos.append(services.GRUPO_ADMIN_SISTEMA)
         elif user.rol == "ADMIN_ESCOLAR" and user.institucion_id:
             self.grupos.append(services.grupo_admin_escolar(user.institucion_id))
+        if user.institucion_id:
+            # Para enterarse de quién se conecta o desconecta en su institución (lista «En línea»)
+            self.grupos.append(services.grupo_presencia(user.institucion_id))
         for grupo in self.grupos:
             await self.channel_layer.group_add(grupo, self.channel_name)
 
         await self.accept()
         await self._guardar_presencia("ACTIVO")
+        await self._anunciar_presencia(conectado=True)
         await self.send_json(
             {
                 "evento": "conexion_establecida",
@@ -63,13 +67,18 @@ class NotificacionesConsumer(AsyncJsonWebsocketConsumer):
             return
         for grupo in self.grupos:
             await self.channel_layer.group_discard(grupo, self.channel_name)
+        conexiones_restantes = 0
         try:
             cliente = self._cliente_redis()
             await cliente.hdel(self._clave_presencia(), self.channel_name)
+            conexiones_restantes = await cliente.hlen(self._clave_presencia())
         except Exception:  # noqa: BLE001
             logger.warning("No se pudo limpiar la presencia en Redis.", exc_info=True)
         finally:
             await self._cerrar_redis()
+        # Con otra pestaña abierta el usuario sigue en línea: solo se avisa al cerrar la última
+        if not conexiones_restantes:
+            await self._anunciar_presencia(conectado=False)
 
     # ------------------------------------------------------------------ mensajes del cliente
     async def receive(self, text_data=None, bytes_data=None, **kwargs):
@@ -129,7 +138,36 @@ class NotificacionesConsumer(AsyncJsonWebsocketConsumer):
             {"evento": event.get("evento", "chat.mensaje"), "mensaje": event.get("mensaje", {})}
         )
 
+    async def presencia_cambio(self, event):
+        """Alguien de la institución se conectó o desconectó: el navegador refresca la lista «En línea»."""
+        await self.send_json(
+            {
+                "evento": services.EVENTO_PRESENCIA,
+                "usuario_id": event["usuario_id"],
+                "institucion_id": event.get("institucion_id"),
+                "conectado": event["conectado"],
+            }
+        )
+
     # ------------------------------------------------------------------------- auxiliares
+    async def _anunciar_presencia(self, conectado):
+        """Publica el cambio en la institución del usuario y a los Administradores del Sistema.
+        Solo viaja el id (sin nombres ni datos personales); el navegador consulta la lista por la API."""
+        destinos = [services.GRUPO_ADMIN_SISTEMA]
+        if self.user.institucion_id:
+            destinos.append(services.grupo_presencia(self.user.institucion_id))
+        mensaje = {
+            "type": "presencia.cambio",
+            "usuario_id": self.user.pk,
+            "institucion_id": self.user.institucion_id,
+            "conectado": conectado,
+        }
+        try:
+            for grupo in destinos:
+                await self.channel_layer.group_send(grupo, mensaje)
+        except Exception:  # noqa: BLE001 - la presencia es accesoria: nunca cierra el socket
+            logger.warning("No se pudo anunciar el cambio de presencia.", exc_info=True)
+
     async def _error(self, codigo, **extra):
         await self.send_json({"evento": "error", "codigo": codigo, **extra})
 

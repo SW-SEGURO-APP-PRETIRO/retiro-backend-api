@@ -69,6 +69,67 @@ def registrar_institucion(datos, actor=None):
     return institucion, usuario, contrasena_temporal
 
 
+def ruc_en_uso(ruc):
+    return Institucion.objects.filter(ruc=ruc).exists()
+
+
+def correo_institucion_en_uso(correo):
+    return Institucion.objects.filter(correo__iexact=correo).exists()
+
+
+def registrar_institucion_con_contrasena(datos, contrasena):
+    """Registro público (SignUp web): la persona registra su institución y se convierte en su
+    Administrador Escolar con la contraseña que eligió (hash Argon2), sin clave temporal.
+
+    Reutiliza `registrar_institucion` (misma bitácora y aviso en tiempo real al Administrador del
+    Sistema) dentro de una sola transacción: si algo falla, no queda nada a medias. La institución
+    queda PENDIENTE_APROBACION y la cuenta PENDIENTE hasta que el Administrador del Sistema decida.
+    """
+    with transaction.atomic():
+        institucion, usuario, _temporal = registrar_institucion(datos)
+        usuario.set_password(contrasena)
+        usuario.contrasena_temporal = False
+        usuario.expira_temporal = None
+        usuario.save(update_fields=["password", "contrasena_temporal", "expira_temporal"])
+    return institucion, usuario
+
+
+def _avisar_decision_por_correo(institucion, aprobada, motivo):
+    """Informa al Administrador Escolar el resultado de su solicitud. Un fallo de correo nunca revierte
+    la decisión: queda registrado en el log y la persona puede consultar intentando iniciar sesión."""
+    import logging
+
+    from django.conf import settings
+    from django.core.mail import send_mail
+
+    destinatarios = list(
+        Usuario._base_manager.filter(institucion_id=institucion.pk, rol=Rol.ADMIN_ESCOLAR)
+        .values_list("correo", flat=True)
+    )
+    if not destinatarios:
+        return
+    if aprobada:
+        asunto = "Tu institución fue aprobada - Retiro Seguro"
+        cuerpo = (
+            f"¡Buenas noticias! La solicitud de registro de {institucion.nombre} fue aprobada.\n\n"
+            "Ya puedes iniciar sesión como Administrador Escolar con tu correo y la contraseña que "
+            f"elegiste al registrarte:\n{settings.SITE_URL}/autenticacion/ingresar/\n"
+        )
+    else:
+        asunto = "Resultado de tu solicitud de registro - Retiro Seguro"
+        cuerpo = (
+            f"La solicitud de registro de {institucion.nombre} no fue aprobada.\n\n"
+            f"Motivo: {motivo or 'No especificado.'}\n\n"
+            "Si crees que es un error, comunícate con el equipo de Retiro Seguro.\n"
+        )
+    try:
+        send_mail(asunto, cuerpo, None, destinatarios, fail_silently=False)
+    except Exception:  # noqa: BLE001 - el correo es informativo
+        logging.getLogger(__name__).exception(
+            "No se pudo avisar la decisión de la institución %s por correo.", institucion.pk
+        )
+
+
 def decidir_institucion(institucion, admin_sistema, aprobada, motivo):
     from apps.autenticacion.services import _registrar_auditoria
 
@@ -91,6 +152,8 @@ def decidir_institucion(institucion, admin_sistema, aprobada, motivo):
         "EXITO",
         {"institucion_id": institucion.pk, "motivo": motivo},
     )
+    # Tras confirmar la transacción: no se avisa de una decisión que se revirtió
+    transaction.on_commit(lambda: _avisar_decision_por_correo(institucion, aprobada, motivo))
     return institucion
 
 

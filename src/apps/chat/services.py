@@ -372,3 +372,83 @@ def _emitir_mensaje_chat(usuario_ids, payload_msg):
     except Exception:  # noqa: BLE001
         logger.exception("No se pudo emitir el mensaje de chat en tiempo real.")
 
+
+
+# ---------------------------------------------------------------------------- Presencia (en línea)
+# El WebSocket de notificaciones guarda un hash de Redis `presencia:{usuario_id}` con un campo por
+# conexión abierta (varias pestañas) y expiración de 120 s que renueva cada `ping`. Aquí solo se lee.
+EVENTO_PRESENCIA = "presencia.cambio"
+
+
+def grupo_presencia(institucion_id):
+    """Grupo de Channels que recibe los avisos de conexión/desconexión de una institución."""
+    return f"presencia_{institucion_id}"
+
+
+def clave_presencia(usuario_id):
+    return f"presencia:{usuario_id}"
+
+
+def _leer_presencias(usuario_ids):
+    """{usuario_id: "ACTIVO" | "AUSENTE"} solo de los usuarios con al menos una conexión abierta."""
+    import redis
+    from django.conf import settings
+
+    ids = list(usuario_ids)
+    if not ids:
+        return {}
+    cliente = redis.Redis.from_url(
+        settings.REDIS_URL, decode_responses=True, socket_timeout=2, socket_connect_timeout=2
+    )
+    try:
+        tuberia = cliente.pipeline()
+        for uid in ids:
+            tuberia.hvals(clave_presencia(uid))
+        estados = tuberia.execute()
+    finally:
+        cliente.close()
+    return {
+        uid: ("ACTIVO" if "ACTIVO" in valores else "AUSENTE")
+        for uid, valores in zip(ids, estados)
+        if valores
+    }
+
+
+def usuarios_conectados(user, institucion_id=None):
+    """Usuarios en línea que comparten la sala general con `user`.
+
+    Son los mismos que reciben los mensajes de esa sala: las cuentas ACTIVAS de la institución y los
+    Administradores del Sistema. Un usuario de colegio solo ve su institución (se ignora el parámetro);
+    el Administrador del Sistema elige la institución de la sala que está mirando.
+
+    Devuelve (disponible, usuarios). `disponible` es False si Redis no responde.
+    """
+    from django.db.models import Q
+
+    if user.rol != Rol.ADMIN_SISTEMA:
+        institucion_id = user.institucion_id
+    if not institucion_id:
+        return True, []
+    candidatos = list(
+        Usuario._base_manager.filter(
+            Q(institucion_id=institucion_id) | Q(rol=Rol.ADMIN_SISTEMA), estado=Usuario.Estado.ACTIVA
+        ).values("id", "nombres", "apellidos", "rol")
+    )
+    try:
+        presencias = _leer_presencias(c["id"] for c in candidatos)
+    except Exception:  # noqa: BLE001 - la presencia es accesoria: el chat sigue funcionando sin ella
+        logger.warning("No se pudo consultar la presencia en Redis.", exc_info=True)
+        return False, []
+    conectados = [
+        {
+            "id": c["id"],
+            "nombre": f"{c['nombres']} {c['apellidos']}".strip(),
+            "rol": c["rol"],
+            "estado": presencias[c["id"]],
+            "es_usted": c["id"] == user.pk,
+        }
+        for c in candidatos
+        if c["id"] in presencias
+    ]
+    conectados.sort(key=lambda u: (not u["es_usted"], u["nombre"].lower()))
+    return True, conectados
