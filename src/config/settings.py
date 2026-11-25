@@ -15,6 +15,10 @@ SECRET_KEY = env("DJANGO_SECRET_KEY")
 DEBUG = env("DJANGO_DEBUG")
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
+PASSWORD_RESET_URL = env(
+    "PASSWORD_RESET_URL",
+    default="https://localhost:8443/autenticacion/restablecer/",
+)
 
 # Claves para cifrado de campos (Fernet) y firmas HMAC. Ver shared/utils/crypto.py
 FIELD_ENCRYPTION_KEY = env("FIELD_ENCRYPTION_KEY", default="")

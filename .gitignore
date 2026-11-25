@@ -17,6 +17,7 @@ htmlcov/
 .idea/
 .vscode/
 .DS_Store
+docker-compose.override.yml
 
 # Artefactos
 staticfiles/
@@ -27,3 +28,5 @@ artifacts/
 
 #.md
 p-*.md
+# Plan local de implementación, no documentación del producto.
+docs/superpowers/plans/2026-11-17-panel-escolar.md

@@ -171,5 +171,4 @@ docker compose exec app python manage.py showmigrations
 
 - [Guía del equipo](GUIA_DEL_EQUIPO.md): base de datos, Docker, tenancy y convenciones.
 - [Diagrama entidad-relación](docs/ER.md): modelos y relaciones.
-- [Guía de pruebas del bloque de autenticación](p-GUIA_PRUEBAS_BLOQUE_A.md).
 - [Colección de Postman](docs/postman/README.md).
