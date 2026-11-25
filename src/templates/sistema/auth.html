@@ -6,12 +6,12 @@
   <form id="auth-form">{% csrf_token %}
     {% if mode == 'ingresar' or mode == 'recuperar' %}<label>Correo electrónico<input type="email" name="correo" autocomplete="username" placeholder="admin.sistema@retiroseguro.test" required maxlength="254"></label>{% endif %}
     {% if mode == 'ingresar' or mode == 'cambiar-contrasena' %}<label>{% if mode == 'ingresar' %}Contraseña{% else %}Contraseña actual{% endif %}<input type="password" name="{% if mode == 'ingresar' %}contrasena{% else %}contrasena_actual{% endif %}" autocomplete="current-password" required></label>{% endif %}
-    {% if mode == 'restablecer' %}<label>Token de recuperación<input name="token" autocomplete="off" required></label>{% endif %}
+    {% if mode == 'restablecer' and not reset_token_valid %}<div class="error-box" role="alert">El enlace de recuperación no es válido o expiró. Solicita uno nuevo.</div>{% endif %}
     {% if mode == 'restablecer' or mode == 'cambiar-contrasena' %}<label>Nueva contraseña<input type="password" name="nueva_contrasena" autocomplete="new-password" minlength="10" required></label><label>Confirma la nueva contraseña<input type="password" name="confirmacion" autocomplete="new-password" minlength="10" required></label>{% endif %}
     <div id="auth-error" class="error-box" role="alert" hidden></div><div id="auth-message" role="status" class="success-box" hidden></div>
-    <button class="button primary" type="submit">{% if mode == 'ingresar' %}Entrar al panel del sistema <span aria-hidden="true">→</span>{% elif mode == 'recuperar' %}Solicitar recuperación{% else %}Actualizar contraseña{% endif %}</button>
+    <button class="button primary" type="submit" {% if mode == 'restablecer' and not reset_token_valid %}disabled{% endif %}>{% if mode == 'ingresar' %}Entrar al panel del sistema <span aria-hidden="true">→</span>{% elif mode == 'recuperar' %}Solicitar recuperación{% else %}Actualizar contraseña{% endif %}</button>
   </form>
-  {% if mode == 'ingresar' %}<a class="auth-link" href="/sistema/autenticacion/recuperar/">¿Olvidaste tu contraseña?</a><a class="auth-link muted" href="/autenticacion/ingresar/">Ir al portal de Administración Escolar →</a>{% else %}<a class="auth-link" href="/sistema/autenticacion/ingresar/">Volver al inicio de sesión del sistema</a>{% endif %}
+  {% if mode == 'ingresar' %}<a class="auth-link" href="/sistema/autenticacion/recuperar/">¿Olvidaste tu contraseña?</a><a class="auth-link muted" href="/autenticacion/ingresar/">Ir al portal de Administración Escolar →</a>{% elif mode == 'restablecer' and not reset_token_valid %}<a class="auth-link" href="/sistema/autenticacion/recuperar/">Solicitar un nuevo enlace de recuperación</a>{% else %}<a class="auth-link" href="/sistema/autenticacion/ingresar/">Volver al inicio de sesión del sistema</a>{% endif %}
   <p class="auth-note">Acceso restringido a cuentas con rol ADMIN_SISTEMA. Todo intento de acceso queda encadenado en la bitácora técnica.</p></div></section>
 </main>
 {% endblock %}

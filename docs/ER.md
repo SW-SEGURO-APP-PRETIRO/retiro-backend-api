@@ -8,7 +8,7 @@ Las 20 tablas de negocio de los 7 módulos del monolito.
 - Los **cinco roles** (Administrador del Sistema, Administrador Escolar, Padre, Guardia y Cuidador Fijo) se guardan en `Usuario`, diferenciados por el campo `rol`.
 - `Cuidador` guarda a la persona que retira; si es fijo, `usuario_id` apunta a su cuenta en `Usuario`.
 - `institucion_id = 0` en `EventoAuditoria` indica un evento global (sin institución).
-- El módulo `chat` persiste notificaciones para el primer bimestre. Las tablas de salas y mensajes quedan preparadas para una futura funcionalidad de chat.
+- El módulo `chat` persiste notificaciones y mensajes. Las salas generales por institución están implementadas con historial en base de datos y entrega en tiempo real mediante WebSockets.
 
 | Módulo | Tablas |
 |---|---|
@@ -28,7 +28,7 @@ Las 20 tablas de negocio de los 7 módulos del monolito.
 | `SalaParticipante` | `institucion_id`, `sala_id`, `usuario_id` |
 | `MensajeChat` | `institucion_id`, `sala_id`, `autor_id`, `contenido`, `enviado_en` |
 
-`SalaChat`, `SalaParticipante` y `MensajeChat` quedan preparadas para una futura funcionalidad de chat y no forman parte del flujo de notificaciones del primer bimestre.
+El chat visible usa salas generales por institución. Las salas privadas están modeladas, pero no se consideran un flujo de mensajería directa validado de extremo a extremo. Las notificaciones y mensajes se entregan en tiempo real mediante Django Channels y Redis.
 
 ```mermaid
 erDiagram
@@ -164,6 +164,9 @@ erDiagram
         bigint acceso_emitido_por_id
         datetime acceso_emitido_en
         datetime revocada_en
+        bigint rechazada_por_id
+        datetime rechazada_en
+        string motivo_rechazo
         string firma_hmac
     }
     PersonaBloqueada {

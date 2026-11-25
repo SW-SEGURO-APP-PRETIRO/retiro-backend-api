@@ -16,8 +16,10 @@ from .services import (
     cambiar_contrasena,
     cerrar_sesion,
     confirmar_recuperacion,
+    confirmar_recuperacion_por_hash,
     datos_usuario,
     solicitar_recuperacion,
+    CLAVE_SESION_RECUPERACION,
 )
 
 
@@ -105,7 +107,13 @@ class SolicitarRecuperacionView(APIView):
         solicitar_recuperacion(serializer.validated_data["correo"])
         datos = {}
         return Response(
-            {"datos": datos, "mensaje": "Si el correo existe, se generó un enlace de recuperación."}
+            {
+                "datos": datos,
+                "mensaje": (
+                    "Si el correo existe, recibirás un enlace para restablecerla. "
+                    "Revisa también la carpeta de correo no deseado."
+                ),
+            }
         )
 
 
@@ -117,10 +125,16 @@ class ConfirmarRecuperacionView(APIView):
         serializer = ConfirmacionRecuperacionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
-            confirmar_recuperacion(
-                serializer.validated_data["token"],
-                serializer.validated_data["nueva_contrasena"],
-            )
+            token = serializer.validated_data.get("token")
+            nueva_contrasena = serializer.validated_data["nueva_contrasena"]
+            if token:
+                confirmar_recuperacion(token, nueva_contrasena)
+            else:
+                confirmar_recuperacion_por_hash(
+                    request.session.get(CLAVE_SESION_RECUPERACION),
+                    nueva_contrasena,
+                )
         except ValueError as exc:
             return error("TOKEN_INVALIDO", str(exc))
+        request.session.pop(CLAVE_SESION_RECUPERACION, None)
         return Response({"datos": {}, "mensaje": "Contraseña restablecida correctamente."})

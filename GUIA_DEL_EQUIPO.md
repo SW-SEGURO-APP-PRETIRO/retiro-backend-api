@@ -29,15 +29,15 @@ Al arrancar, `app` ejecuta en orden: `esperar_bd` (espera a SQL Server y crea la
 | `chat` | `Notificacion`, `SalaChat`, `SalaParticipante`, `MensajeChat` | Hecho, con migración |
 | `auditoria` | `EventoAuditoria` (+ disparador que la hace inmutable) | Hecho, con migración |
 
-Total en SQL Server: 26 tablas (las 20 de negocio más 6 propias de Django: sesiones, permisos y migraciones). **No se toman en cuenta la entidades de salaChat, sala Paritcipante, MensajeChAT DEBIDO QUE NO SE IMPLEMENTA EL CHTA**
+Total en SQL Server: 26 tablas (las 20 de negocio más 6 propias de Django: sesiones, permisos y migraciones). Las tablas `SalaChat`, `SalaParticipante` y `MensajeChat` sí se usan para las salas generales por institución y su historial.
 
 **Lo que ya está verificado en un equipo real:** SQL Server arranca, todas las migraciones se aplican, `https://localhost:8443/salud/` responde `{"estado": "ok"}`, la semilla se ejecuta dos veces sin duplicar datos y la bitácora rechaza modificaciones (ver sección 3).
 
 **Qué significa "hecho":** las tablas, sus relaciones y sus reglas de integridad existen. La **lógica de cada módulo** (servicios, vistas, formularios) la escribe cada responsable encima de estas tablas.
 
-### Tablas del chat (decisión pendiente del equipo)
+### Tablas del chat
 
-`Notificacion` es lo que se usa para las alertas en tiempo real (por ejemplo "retiro realizado"). `SalaChat`, `SalaParticipante` y `MensajeChat` están modeladas y migradas porque el documento de requerimientos define sala general por institución con historial en la base de datos, pero **no se implementan debio a que con el docente se converso sobre las notificaciones push** 
+`Notificacion` conserva las alertas en tiempo real (por ejemplo "retiro realizado"). `SalaChat`, `SalaParticipante` y `MensajeChat` soportan salas generales por institución, historial persistido y entrega en tiempo real. La interfaz actual no ofrece una conversación privada validada entre dos usuarios ni un indicador de cantidad de usuarios conectados.
 
 ### Código compartido (`src/shared`)
 
@@ -142,7 +142,7 @@ docker compose exec db sh -c "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U s
 
 ### Ver la base con DBeaver o SSMS
 
-En `docker-compose.yml`, descomenta el puerto `127.0.0.1:1433:1433` del servicio `db` y reinicia. Conecta a `localhost,1433` con el usuario `retiro_app` y tu `DB_PASSWORD`, marcando "Trust server certificate". Nunca publiques ese puerto en un servidor.
+El puerto del servicio `db` ya está publicado solo en `127.0.0.1:1433`. Conecta a `localhost,1433` con el usuario `retiro_app` y tu `DB_PASSWORD`, marcando "Trust server certificate". Nunca publiques ese puerto en un servidor.
 
 ---
 

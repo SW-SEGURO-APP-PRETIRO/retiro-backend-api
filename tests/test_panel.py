@@ -1,5 +1,12 @@
+import hashlib
+from datetime import timedelta
+from urllib.parse import parse_qs, urlsplit
+
 import pytest
+from django.conf import settings
 from django.test import Client
+from django.utils import timezone
+from apps.autenticacion.models import TokenRecuperacion
 from apps.cuentas.models import Usuario
 from apps.instituciones.models import Institucion
 
@@ -41,6 +48,69 @@ def test_recuperacion_envia_correo_sin_exponer_token(client, admin, monkeypatch)
     assert "token" not in response.json()["datos"]
     assert len(enviados) == 1
     assert enviados[0]["recipient_list"] == [admin.correo]
+    link = enviados[0]["message"].split(
+        "Usa este enlace antes de 30 minutos:\n", 1
+    )[1].splitlines()[0]
+    parsed_link = urlsplit(link)
+    token = parse_qs(parsed_link.query)["token"][0]
+    assert f"{parsed_link.scheme}://{parsed_link.netloc}{parsed_link.path}" == (
+        settings.PASSWORD_RESET_URL
+    )
+    assert hashlib.sha256(token.encode("utf-8")).hexdigest() == (
+        TokenRecuperacion.objects.get(usuario_id=admin.pk).hash_token
+    )
+
+
+@pytest.mark.django_db
+def test_enlace_recuperacion_se_cambia_por_sesion_y_limpia_la_url(client, admin):
+    token = "test-password-reset-token"
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    registro = TokenRecuperacion.objects.create(
+        usuario_id=admin.pk,
+        hash_token=token_hash,
+        expira_en=timezone.now() + timedelta(minutes=30),
+    )
+
+    response = client.get(f"/autenticacion/restablecer/?token={token}")
+
+    assert response.status_code == 302
+    assert response["Location"] == "/autenticacion/restablecer/"
+    assert response["Referrer-Policy"] == "no-referrer"
+    assert client.session["_password_reset_token_hash"] == token_hash
+    assert token not in str(dict(client.session.items()))
+
+    response = client.get(response["Location"])
+    assert response.status_code == 200
+    assert response["Referrer-Policy"] == "no-referrer"
+    assert token.encode() not in response.content
+    assert b'name="token"' not in response.content
+
+    response = client.post(
+        "/api/v1/autenticacion/confirmar-recuperacion/",
+        {"nueva_contrasena": "NuevaClave#2026"},
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    assert client.session.get("_password_reset_token_hash") is None
+    registro.refresh_from_db()
+    assert registro.usado_en is not None
+    admin.refresh_from_db()
+    assert admin.check_password("NuevaClave#2026")
+
+
+@pytest.mark.django_db
+def test_enlace_recuperacion_invalido_no_abre_formulario(client):
+    response = client.get("/autenticacion/restablecer/?token=token-invalido")
+
+    assert response.status_code == 302
+    assert response["Location"] == "/autenticacion/restablecer/"
+    assert response["Referrer-Policy"] == "no-referrer"
+
+    response = client.get(response["Location"])
+    assert response.status_code == 200
+    assert b"El enlace de recuperaci" in response.content
+    assert b'disabled' in response.content
 
 
 @pytest.mark.django_db

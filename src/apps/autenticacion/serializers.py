@@ -30,7 +30,7 @@ class SolicitudRecuperacionSerializer(serializers.Serializer):
 
 
 class ConfirmacionRecuperacionSerializer(serializers.Serializer):
-    token = serializers.CharField()
+    token = serializers.CharField(required=False, write_only=True)
     nueva_contrasena = serializers.CharField(write_only=True, min_length=8)
 
     def validate_nueva_contrasena(self, value):

@@ -3,6 +3,7 @@ import json
 import logging
 import secrets
 from datetime import timedelta
+from urllib.parse import urlencode
 
 import pyotp
 from cryptography.fernet import Fernet, InvalidToken
@@ -17,6 +18,8 @@ from apps.cuentas.models import Rol, Usuario
 from apps.instituciones.models import Institucion
 
 from .models import TokenRecuperacion
+
+CLAVE_SESION_RECUPERACION = "_password_reset_token_hash"
 
 
 def datos_usuario(user):
@@ -202,7 +205,9 @@ def solicitar_recuperacion(correo):
         expira_en=timezone.now() + timedelta(minutes=30),
     )
     _registrar_auditoria(user, "SOLICITUD_RECUPERACION", "EXITO", {})
-    enlace = f"https://localhost:8443/autenticacion/restablecer/?token={token}"
+    enlace = (
+        f"{settings.PASSWORD_RESET_URL}?{urlencode({'token': token})}"
+    )
     try:
         send_mail(
             subject="Recuperación de contraseña - Retiro Seguro",
@@ -226,8 +231,20 @@ def solicitar_recuperacion(correo):
     return None
 
 
+def obtener_hash_token_recuperacion(token):
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    existe = TokenRecuperacion.objects.filter(
+        hash_token=token_hash, usado_en__isnull=True, expira_en__gt=timezone.now()
+    ).exists()
+    return token_hash if existe else None
+
+
 def confirmar_recuperacion(token, nueva_contrasena):
     token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    confirmar_recuperacion_por_hash(token_hash, nueva_contrasena)
+
+
+def confirmar_recuperacion_por_hash(token_hash, nueva_contrasena):
     registro = TokenRecuperacion.objects.filter(
         hash_token=token_hash, usado_en__isnull=True, expira_en__gt=timezone.now()
     ).first()

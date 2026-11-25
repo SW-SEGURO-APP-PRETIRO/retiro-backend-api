@@ -9,9 +9,6 @@ const endpoints = {
   restablecer: "confirmar-recuperacion",
   "cambiar-contrasena": "cambiar-contrasena-temporal",
 };
-if (mode === "restablecer")
-  form.elements.token.value =
-    new URLSearchParams(location.search).get("token") || "";
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   errorBox.hidden = true;
@@ -66,11 +63,6 @@ form.addEventListener("submit", async (event) => {
       link.textContent = "Ingresar token de recuperación";
       link.className = "auth-link";
       message.append(link);
-      if (document.body.dataset.preview === "true" && result.datos?.token) {
-        const code = document.createElement("code");
-        code.textContent = result.datos.token;
-        message.append(code);
-      }
     } else {
       location.assign("/autenticacion/ingresar/");
     }

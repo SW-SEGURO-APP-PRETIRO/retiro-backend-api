@@ -8,6 +8,10 @@ from django.shortcuts import redirect, render
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods
+from apps.autenticacion.services import (
+    CLAVE_SESION_RECUPERACION,
+    obtener_hash_token_recuperacion,
+)
 from apps.cuentas.models import Rol
 from apps.instituciones.services import registrar_institucion_con_contrasena
 from shared.permissions import EsAdminEscolar
@@ -79,7 +83,35 @@ def auth_page(request, mode="ingresar"):
     if mode == "cambiar-contrasena" and not request.user.is_authenticated:
         return redirect("/autenticacion/ingresar/")
     titles = {"ingresar": "Inicia sesión", "recuperar": "Recupera tu acceso", "restablecer": "Crea una nueva contraseña", "cambiar-contrasena": "Actualiza tu contraseña"}
-    return render(request, "escolar/auth.html", {"mode": mode, "title": titles[mode], "preview": getattr(settings, "ESCOLAR_PREVIEW", False)})
+    reset_token_valid = False
+    if mode == "restablecer":
+        token = request.GET.get("token")
+        if token is not None:
+            request.session.pop(CLAVE_SESION_RECUPERACION, None)
+            token_hash = obtener_hash_token_recuperacion(token)
+            if token_hash:
+                request.session.cycle_key()
+                request.session[CLAVE_SESION_RECUPERACION] = token_hash
+                request.session.set_expiry(30 * 60)
+                reset_token_valid = True
+            response = redirect(request.path)
+            response["Referrer-Policy"] = "no-referrer"
+            return response
+        reset_token_valid = bool(request.session.get(CLAVE_SESION_RECUPERACION))
+
+    response = render(
+        request,
+        "escolar/auth.html",
+        {
+            "mode": mode,
+            "title": titles[mode],
+            "preview": getattr(settings, "ESCOLAR_PREVIEW", False),
+            "reset_token_valid": reset_token_valid,
+        },
+    )
+    if mode == "restablecer":
+        response["Referrer-Policy"] = "no-referrer"
+    return response
 
 
 
