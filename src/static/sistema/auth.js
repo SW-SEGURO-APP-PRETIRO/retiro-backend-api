@@ -3,6 +3,32 @@ const mode = document.body.dataset.auth;
 const form = document.querySelector("#auth-form");
 const errorBox = document.querySelector("#auth-error");
 const message = document.querySelector("#auth-message");
+let lockTimer;
+function showLoginError(error) {
+  const text = error.message || "No se pudo iniciar sesión.";
+  const lockedUntil = Date.parse(error.details?.bloqueado_hasta || "");
+  if (!Number.isFinite(lockedUntil)) {
+    errorBox.textContent = text;
+    return;
+  }
+
+  errorBox.dataset.lockedUntil = String(lockedUntil);
+  const updateCountdown = () => {
+    const remaining = Math.max(0, Math.ceil((lockedUntil - Date.now()) / 1000));
+    if (!remaining) {
+      clearInterval(lockTimer);
+      delete errorBox.dataset.lockedUntil;
+      form.querySelector("[type=submit]").disabled = false;
+      errorBox.textContent = "El bloqueo terminó. Ya puedes intentar de nuevo.";
+      return;
+    }
+    const minutes = Math.floor(remaining / 60);
+    const seconds = String(remaining % 60).padStart(2, "0");
+    errorBox.textContent = `${text} Tiempo restante: ${minutes}:${seconds}.`;
+  };
+  updateCountdown();
+  if (lockedUntil > Date.now()) lockTimer = setInterval(updateCountdown, 1000);
+}
 const endpoints = {
   ingresar: "ingresar",
   recuperar: "solicitar-recuperacion",
@@ -11,6 +37,8 @@ const endpoints = {
 };
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  clearInterval(lockTimer);
+  delete errorBox.dataset.lockedUntil;
   errorBox.hidden = true;
   message.hidden = true;
   const data = Object.fromEntries(new FormData(form));
@@ -48,22 +76,16 @@ form.addEventListener("submit", async (event) => {
     } else if (mode === "recuperar") {
       message.textContent = result.mensaje;
       message.hidden = false;
-      const link = document.createElement("a");
-      link.href = "/sistema/autenticacion/restablecer/";
-      link.textContent = "Ingresar token de recuperación";
-      link.className = "auth-link";
-      message.append(link);
     } else {
       location.assign("/sistema/autenticacion/ingresar/");
     }
   } catch (error) {
-    errorBox.textContent =
-      mode === "ingresar" && error.status === 401
-        ? "No se pudo iniciar sesión. Revisa tus credenciales."
-        : errorText(error);
+    if (mode === "ingresar" && error.status === 401) showLoginError(error);
+    else errorBox.textContent = errorText(error);
     errorBox.hidden = false;
   } finally {
-    button.disabled = false;
+    const lockedUntil = Number(errorBox.dataset.lockedUntil);
+    button.disabled = Number.isFinite(lockedUntil) && lockedUntil > Date.now();
     button.textContent = label;
   }
 });

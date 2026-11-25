@@ -105,6 +105,75 @@ test("un login inválido muestra el error sin redirigir ni vaciar el formulario"
   assert.equal(redirected, false);
 });
 
+test("solicitar recuperación indica revisar el correo y no ofrece un enlace sin token", async () => {
+  const originalGlobals = {
+    document: globalThis.document,
+    fetch: globalThis.fetch,
+    FormData: globalThis.FormData,
+    location: globalThis.location,
+  };
+  try {
+    for (const [modulePath, authPath] of [
+      ["../src/static/escolar/auth.js?recovery-test", "recuperar"],
+      ["../src/static/sistema/auth.js?recovery-test", "recuperar"],
+    ]) {
+      let submit;
+      const children = [];
+      const button = { textContent: "Solicitar recuperación", disabled: false };
+      const form = {
+        addEventListener: (event, listener) => {
+          if (event === "submit") submit = listener;
+        },
+        querySelector: () => button,
+      };
+      const message = {
+        hidden: true,
+        textContent: "",
+        append: (child) => children.push(child),
+      };
+      globalThis.document = {
+        body: { dataset: { auth: authPath } },
+        cookie: "csrftoken=test-token",
+        createElement: () => ({}),
+        querySelector: (selector) =>
+          ({
+            "#auth-form": form,
+            "#auth-error": { hidden: true, dataset: {}, textContent: "" },
+            "#auth-message": message,
+          })[selector],
+      };
+      globalThis.FormData = class {
+        constructor() {
+          return new Map([["correo", "admin@example.test"]]);
+        }
+      };
+      globalThis.location = {
+        origin: "http://localhost",
+        assign: () => {},
+      };
+      globalThis.fetch = async () => ({
+        ok: true,
+        json: async () => ({
+          datos: {},
+          mensaje: "Si el correo existe, recibirás un enlace.",
+        }),
+      });
+
+      await import(modulePath);
+      await submit({ preventDefault() {} });
+
+      assert.equal(message.hidden, false);
+      assert.match(message.textContent, /recibirás un enlace/);
+      assert.deepEqual(children, []);
+    }
+  } finally {
+    globalThis.document = originalGlobals.document;
+    globalThis.fetch = originalGlobals.fetch;
+    globalThis.FormData = originalGlobals.FormData;
+    globalThis.location = originalGlobals.location;
+  }
+});
+
 test("el catálogo del administrador del sistema no incluye operaciones escolares", () => {
   assert.equal("estudiantes" in systemCatalog, false);
   assert.equal("cuidadores" in systemCatalog, false);

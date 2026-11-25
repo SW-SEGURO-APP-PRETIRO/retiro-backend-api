@@ -1,4 +1,6 @@
 """Registro (SignUp) de una institución con su Administrador Escolar y aprobación por el ADMIN_SISTEMA."""
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from django.test import Client
 
@@ -113,6 +115,50 @@ def test_no_puede_ingresar_hasta_ser_aprobada_y_no_se_revela_a_terceros(client):
     con_clave = ingresar("maria.cardenas@example.test", CONTRASENA)
     assert con_clave.status_code == 401
     assert "pendiente de aprobación" in con_clave.json()["error"]["mensaje"]
+
+
+@pytest.mark.django_db
+def test_ingreso_informa_intentos_y_bloqueo_temporal(client, admin_sistema):
+    admin_sistema.set_password("Clave-correcta#2026")
+    admin_sistema.save(update_fields=["password"])
+
+    primer_fallo = ingresar(admin_sistema.correo, "incorrecta")
+    assert primer_fallo.json()["error"]["mensaje"] == "Credenciales inválidas."
+
+    segundo_fallo = ingresar(admin_sistema.correo, "incorrecta")
+    assert segundo_fallo.json()["error"]["mensaje"] == (
+        "Credenciales inválidas. Te queda 1 intento antes del bloqueo temporal."
+    )
+
+    tercer_fallo = ingresar(admin_sistema.correo, "incorrecta")
+    error = tercer_fallo.json()["error"]
+    assert "se bloqueó durante 15 minutos" in error["mensaje"]
+    assert error["detalles"]["bloqueado_hasta"]
+
+    bloqueado = ingresar(admin_sistema.correo, "Clave-correcta#2026")
+    assert "bloqueada temporalmente" in bloqueado.json()["error"]["mensaje"]
+    assert bloqueado.json()["error"]["detalles"]["bloqueado_hasta"]
+
+
+@pytest.mark.django_db
+def test_al_vencer_el_bloqueo_se_reinicia_el_contador(admin_sistema, monkeypatch):
+    from apps.autenticacion import services
+
+    admin_sistema.set_password("Clave-correcta#2026")
+    admin_sistema.save(update_fields=["password"])
+    ahora = datetime(2026, 11, 24, 12, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(services.timezone, "now", lambda: ahora)
+
+    for _ in range(3):
+        ingresar(admin_sistema.correo, "incorrecta")
+
+    monkeypatch.setattr(services.timezone, "now", lambda: ahora + timedelta(minutes=15, seconds=1))
+    respuesta = ingresar(admin_sistema.correo, "incorrecta")
+    admin_sistema.refresh_from_db()
+
+    assert respuesta.json()["error"]["mensaje"] == "Credenciales inválidas."
+    assert admin_sistema.intentos_fallidos == 1
+    assert admin_sistema.bloqueado_hasta is None
 
 
 # ------------------------------------------------------------------- aprobación del ADMIN_SISTEMA

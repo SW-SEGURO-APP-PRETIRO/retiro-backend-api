@@ -41,11 +41,16 @@ class IngresoView(APIView):
     def post(self, request):
         serializer = IngresoSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user, mensaje = autenticar(
+        user, mensaje, detalles = autenticar(
             request, serializer.validated_data["correo"], serializer.validated_data["contrasena"]
         )
         if not user:
-            return error("AUTENTICACION_FALLIDA", mensaje, http_status=status.HTTP_401_UNAUTHORIZED)
+            return error(
+                "AUTENTICACION_FALLIDA",
+                mensaje,
+                detalles=detalles,
+                http_status=status.HTTP_401_UNAUTHORIZED,
+            )
         return Response(
             {
                 "datos": {

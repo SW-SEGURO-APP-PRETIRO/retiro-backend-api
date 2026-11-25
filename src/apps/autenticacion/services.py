@@ -119,10 +119,16 @@ def autenticar(request, correo, contrasena):
     ahora = timezone.now()
     if user and user.bloqueado_hasta and user.bloqueado_hasta > ahora:
         _registrar_auditoria(user, "INGRESO_BLOQUEADO", "FALLO", {"motivo": "bloqueo_temporal"})
-        return None, "La cuenta está bloqueada temporalmente."
+        return None, "La cuenta está bloqueada temporalmente.", {
+            "bloqueado_hasta": user.bloqueado_hasta.isoformat(),
+        }
+    if user and user.bloqueado_hasta:
+        user.intentos_fallidos = 0
+        user.bloqueado_hasta = None
+        user.save(update_fields=["intentos_fallidos", "bloqueado_hasta"])
     if user and user.estado in (Usuario.Estado.BLOQUEADA, Usuario.Estado.SUSPENDIDA):
         _registrar_auditoria(user, "INGRESO_RECHAZADO", "FALLO", {"motivo": user.estado})
-        return None, "La cuenta no está disponible."
+        return None, "La cuenta no está disponible.", {}
     autenticado = authenticate(request, username=correo, password=contrasena)
     if autenticado is None:
         if user:
@@ -140,7 +146,12 @@ def autenticar(request, correo, contrasena):
             )
             if user.intentos_fallidos >= 3:
                 _notificar_bloqueo_de_cuenta(user)
-        return None, "Credenciales inválidas."
+                return None, "La cuenta se bloqueó durante 15 minutos tras 3 intentos fallidos.", {
+                    "bloqueado_hasta": user.bloqueado_hasta.isoformat(),
+                }
+            if user.intentos_fallidos == 2:
+                return None, "Credenciales inválidas. Te queda 1 intento antes del bloqueo temporal.", {}
+        return None, "Credenciales inválidas.", {}
 
     # El estado de la institución se informa solo a quien ya demostró conocer la contraseña:
     # así no se revela a terceros si un correo está registrado ni en qué estado está su colegio.
@@ -151,7 +162,9 @@ def autenticar(request, correo, contrasena):
             _registrar_auditoria(
                 autenticado, "INGRESO_RECHAZADO", "FALLO", {"motivo": "institucion_no_activa", "estado": estado}
             )
-            return None, MENSAJES_INSTITUCION_NO_ACTIVA.get(estado, "La institución todavía no está activa.")
+            return None, MENSAJES_INSTITUCION_NO_ACTIVA.get(
+                estado, "La institución todavía no está activa."
+            ), {}
 
     # TOTP/2FA reservado para el 2.º bimestre. El 1.er bimestre usa solo correo y contraseña.
     # codigo_totp = request.data.get("codigo_totp", "")
@@ -173,7 +186,7 @@ def autenticar(request, correo, contrasena):
     autenticado.bloqueado_hasta = None
     autenticado.save(update_fields=["intentos_fallidos", "bloqueado_hasta"])
     _registrar_auditoria(autenticado, "INGRESO_EXITOSO", "EXITO", {})
-    return autenticado, None
+    return autenticado, None, {}
 
 
 def cerrar_sesion(request):
